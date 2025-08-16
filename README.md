@@ -2,6 +2,8 @@
 
 A professional proxy server for forwarding requests to the Anthropic API, specifically designed for Claude Code with comprehensive monitoring capabilities.
 
+**[🇨🇳 中文文档](docs/README_CN.md)** | **[📁 GitHub Repository](https://github.com/kingoliang/anthropic-proxy)**
+
 ## 📁 Project Structure
 
 ```
@@ -169,6 +171,63 @@ Access the built-in monitoring interface at: `http://localhost:8082/monitor`
 - **Node.js 18+**
 - **API Key**: Client must provide API key via headers (`x-api-key` or `authorization`)
 - **Network**: Outbound access to Anthropic API
+
+## 🎯 Using with Claude Code
+
+Once the proxy server is running, configure Claude Code to use it:
+
+### Step 1: Start the Proxy Server
+```bash
+# Start on default port 8082
+npx github:kingoliang/anthropic-proxy
+
+# Or start on custom port (e.g., 3000)
+PORT=3000 npx github:kingoliang/anthropic-proxy
+```
+
+### Step 2: Configure Claude Code Environment
+Set the environment variable to point Claude Code to your proxy:
+
+```bash
+# For default port 8082
+export ANTHROPIC_BASE_URL=http://localhost:8082
+
+# For custom port (e.g., 3000)
+export ANTHROPIC_BASE_URL=http://localhost:3000
+```
+
+### Step 3: Start Claude Code
+```bash
+# Claude Code will now use your proxy server
+claude-code
+```
+
+### Alternative Configuration Methods
+
+**Option 1: Inline environment variable**
+```bash
+ANTHROPIC_BASE_URL=http://localhost:8082 claude-code
+```
+
+**Option 2: Add to your shell profile**
+```bash
+# Add to ~/.bashrc, ~/.zshrc, or ~/.profile
+echo 'export ANTHROPIC_BASE_URL=http://localhost:8082' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Option 3: Create a startup script**
+```bash
+#!/bin/bash
+# start-claude-with-proxy.sh
+export ANTHROPIC_BASE_URL=http://localhost:8082
+claude-code
+```
+
+### Verification
+1. **Check proxy is running**: Visit `http://localhost:8082/monitor`
+2. **Test Claude Code**: Make any request in Claude Code
+3. **Monitor requests**: Watch real-time requests in the monitoring dashboard
 
 ## Technical Details
 
