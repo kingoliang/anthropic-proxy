@@ -96,9 +96,6 @@ anthropic-proxy
 创建 `.env` 文件或设置环境变量：
 
 ```bash
-# Anthropic API 基础 URL
-ANTHROPIC_BASE_URL=https://api.anthropic.com
-
 # 服务器配置
 HOST=0.0.0.0
 PORT=8082
@@ -120,7 +117,7 @@ PORT=3000 npx github:kingoliang/anthropic-proxy
 LOG_LEVEL=DEBUG npx github:kingoliang/anthropic-proxy
 
 # 组合多个环境变量
-PORT=3000 LOG_LEVEL=DEBUG ANTHROPIC_BASE_URL=https://api.anthropic.com npx github:kingoliang/anthropic-proxy
+PORT=3000 LOG_LEVEL=DEBUG npx github:kingoliang/anthropic-proxy
 ```
 
 ## API 端点
@@ -243,7 +240,7 @@ claude-code
 ```bash
 # 使用Docker构建和运行
 docker build -t anthropic-proxy .
-docker run -p 8082:8082 -e ANTHROPIC_API_KEY=your_key anthropic-proxy
+docker run -p 8082:8082 anthropic-proxy
 
 # 或使用Docker Compose
 docker-compose -f examples/docker-compose.yml up

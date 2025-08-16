@@ -96,9 +96,6 @@ anthropic-proxy
 Create a `.env` file or set environment variables:
 
 ```bash
-# Anthropic API base URL
-ANTHROPIC_BASE_URL=https://api.anthropic.com
-
 # Server configuration
 HOST=0.0.0.0
 PORT=8082
@@ -120,7 +117,7 @@ PORT=3000 npx .
 LOG_LEVEL=DEBUG npx .
 
 # Combine multiple environment variables
-PORT=3000 LOG_LEVEL=DEBUG ANTHROPIC_BASE_URL=https://api.anthropic.com npx .
+PORT=3000 LOG_LEVEL=DEBUG npx .
 ```
 
 ## API Endpoints
@@ -243,7 +240,7 @@ claude-code
 ```bash
 # Build and run with Docker
 docker build -t anthropic-proxy .
-docker run -p 8082:8082 -e ANTHROPIC_API_KEY=your_key anthropic-proxy
+docker run -p 8082:8082  anthropic-proxy
 
 # Or use Docker Compose
 docker-compose -f examples/docker-compose.yml up
