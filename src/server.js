@@ -12,8 +12,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Readable } from 'stream';
-import { requestStore } from './monitor.js';
-import { getMonitorHTML } from './monitor-ui.js';
+import { requestStore } from './monitor/store.js';
+import { getMonitorHTML } from './monitor/ui.js';
 
 // Load environment variables
 dotenv.config();

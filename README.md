@@ -1,8 +1,30 @@
 # Anthropic API Proxy
 
-A proxy server for forwarding requests to the Anthropic API, specifically designed for Claude Code.
+A professional proxy server for forwarding requests to the Anthropic API, specifically designed for Claude Code with comprehensive monitoring capabilities.
 
-## Features
+## 📁 Project Structure
+
+```
+anthropic-proxy/
+├── src/                    # Source code
+│   ├── server.js          # Main server application
+│   ├── monitor/           # Monitoring modules
+│   │   ├── store.js       # Request/response data storage
+│   │   └── ui.js          # Web monitoring interface
+│   └── utils/             # Utility functions
+├── docs/                  # Documentation
+├── examples/              # Configuration examples
+│   ├── Dockerfile         # Docker container setup
+│   ├── docker-compose.yml # Docker Compose configuration
+│   └── pm2.config.js      # PM2 process management
+├── package.json
+├── README.md
+├── .env.example           # Environment variables template
+├── .gitignore
+└── LICENSE
+```
+
+## ✨ Features
 
 - 🚀 **Node.js-based proxy** for Anthropic API
 - 📊 **Built-in monitoring dashboard** with real-time updates
@@ -10,46 +32,61 @@ A proxy server for forwarding requests to the Anthropic API, specifically design
 - 📈 **Performance metrics** and token usage tracking
 - 🌊 **Streaming response** support with chunk analysis
 - 💾 **Data export** and management capabilities
+- 🐳 **Docker support** with examples
+- ⚡ **Production ready** with PM2 configuration
 
-## Quick Start
+## 🚀 Quick Start
 
-### Method 1: Run directly from local directory
+### Option 1: Run directly from GitHub (Recommended)
 ```bash
-# In the project directory
-npx .
+# Run immediately without cloning
+npx github:kingoliang/anthropic-proxy
 
-# Or specify a custom port
-PORT=3000 npx .
+# Or with custom configuration
+PORT=3000 LOG_LEVEL=DEBUG npx github:kingoliang/anthropic-proxy
 ```
 
-### Method 2: Global installation
+### Option 2: Clone and run locally
 ```bash
-# Install globally
-npm install -g .
+# Clone the repository
+git clone https://github.com/kingoliang/anthropic-proxy.git
+cd anthropic-proxy
 
-# Run
+# Install dependencies
+npm install
+
+# Configure environment (optional)
+cp .env.example .env
+# Edit .env file with your settings
+
+# Run the server
+npm start
+# or
+npx .
+```
+
+### Option 3: Global installation
+```bash
+# Install globally from GitHub
+npm install -g github:kingoliang/anthropic-proxy
+
+# Run anywhere
 anthropic-proxy
 
 # Or with environment variables
-PORT=3000 anthropic-proxy
+PORT=3000 LOG_LEVEL=DEBUG anthropic-proxy
 ```
 
-### Method 3: Using npm link (development mode)
+### Option 4: Development mode
 ```bash
-# Create global link in project directory
+# Clone and link for development
+git clone https://github.com/kingoliang/anthropic-proxy.git
+cd anthropic-proxy
+npm install
 npm link
 
-# Run
+# Run from anywhere
 anthropic-proxy
-```
-
-### Method 4: Direct script execution
-```bash
-# Ensure execution permissions
-chmod +x anthropic_proxy.js
-
-# Run directly
-./anthropic_proxy.js
 ```
 
 ## Environment Configuration
@@ -141,7 +178,61 @@ Access the built-in monitoring interface at: `http://localhost:8082/monitor`
 - **Stream Processing**: Full chunk tracking and content merging
 - **Error Handling**: Comprehensive error catching and logging
 
-## Troubleshooting
+## 🐳 Production Deployment
+
+### Docker
+```bash
+# Build and run with Docker
+docker build -t anthropic-proxy .
+docker run -p 8082:8082 -e ANTHROPIC_API_KEY=your_key anthropic-proxy
+
+# Or use Docker Compose
+docker-compose -f examples/docker-compose.yml up
+```
+
+### PM2 (Process Manager)
+```bash
+# Install PM2
+npm install -g pm2
+
+# Start with PM2
+pm2 start examples/pm2.config.js
+
+# Monitor
+pm2 monit
+
+# Stop
+pm2 stop anthropic-proxy
+```
+
+### Systemd Service
+```bash
+# Create service file
+sudo nano /etc/systemd/system/anthropic-proxy.service
+
+# Add service configuration
+[Unit]
+Description=Anthropic API Proxy
+After=network.target
+
+[Service]
+Type=simple
+User=nodejs
+WorkingDirectory=/path/to/anthropic-proxy
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+Environment=NODE_ENV=production
+Environment=PORT=8082
+
+[Install]
+WantedBy=multi-user.target
+
+# Enable and start
+sudo systemctl enable anthropic-proxy
+sudo systemctl start anthropic-proxy
+```
+
+## 🔧 Troubleshooting
 
 ### Common Issues:
 
@@ -149,16 +240,41 @@ Access the built-in monitoring interface at: `http://localhost:8082/monitor`
 2. **API key not working**: Verify key format and headers
 3. **Timeout errors**: Increase REQUEST_TIMEOUT value
 4. **Memory usage**: Monitoring data auto-rotates after 1000 requests
+5. **Module not found**: Ensure you're running from the correct directory
 
 ### Debug Mode:
 ```bash
-LOG_LEVEL=DEBUG npx .
+LOG_LEVEL=DEBUG npx github:kingoliang/anthropic-proxy
 ```
 
-## Contributing
+### Health Check:
+```bash
+curl http://localhost:8082/health
+```
 
-This proxy server is designed for development and testing purposes. Feel free to extend with additional features or monitoring capabilities.
+## 🔗 Related Links
 
-## License
+- **GitHub Repository**: https://github.com/kingoliang/anthropic-proxy
+- **NPM Package**: `npx github:kingoliang/anthropic-proxy`
+- **Anthropic API Documentation**: https://docs.anthropic.com/
+- **Docker Hub**: (coming soon)
 
-MIT
+## 🤝 Contributing
+
+This proxy server is designed for development and testing purposes. Contributions are welcome:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## 🙏 Acknowledgments
+
+- Built with [Express.js](https://expressjs.com/)
+- Monitoring UI powered by [Alpine.js](https://alpinejs.dev/) and [Tailwind CSS](https://tailwindcss.com/)
+- Generated with assistance from [Claude Code](https://claude.ai/code)

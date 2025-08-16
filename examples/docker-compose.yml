@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  anthropic-proxy:
+    build: .
+    ports:
+      - "8082:8082"
+    environment:
+      - ANTHROPIC_BASE_URL=https://api.anthropic.com
+      - HOST=0.0.0.0
+      - PORT=8082
+      - REQUEST_TIMEOUT=120000
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./logs:/app/logs

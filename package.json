@@ -2,14 +2,14 @@
   "name": "anthropic-proxy",
   "version": "1.0.0",
   "description": "Anthropic API Proxy Server for Claude Code",
-  "main": "anthropic_proxy.js",
+  "main": "src/server.js",
   "type": "module",
   "bin": {
-    "anthropic-proxy": "./anthropic_proxy.js"
+    "anthropic-proxy": "./src/server.js"
   },
   "scripts": {
-    "start": "node anthropic_proxy.js",
-    "dev": "node --watch anthropic_proxy.js"
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
   },
   "author": "",
   "license": "MIT",
