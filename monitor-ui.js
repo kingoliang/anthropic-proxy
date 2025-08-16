@@ -1,0 +1,411 @@
+/**
+ * Monitor Web UI HTML Generator
+ */
+
+export function getMonitorHTML() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anthropic Proxy Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        .json-view { 
+            background: #1e293b; 
+            color: #e2e8f0; 
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .scroll-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .chunk-timeline {
+            position: relative;
+            padding-left: 20px;
+        }
+        .chunk-timeline::before {
+            content: '';
+            position: absolute;
+            left: 5px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #3b82f6;
+        }
+        .chunk-dot {
+            position: absolute;
+            left: 2px;
+            width: 8px;
+            height: 8px;
+            background: #3b82f6;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div x-data="monitorApp()" x-init="init()" x-cloak>
+        <!-- Header -->
+        <div class="bg-white shadow-sm border-b">
+            <div class="container mx-auto px-4 py-4">
+                <div class="flex justify-between items-center">
+                    <h1 class="text-2xl font-bold text-gray-800">🚀 Anthropic Proxy Monitor</h1>
+                    <div class="flex gap-2">
+                        <button @click="exportData()" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                            Export Data
+                        </button>
+                        <button @click="clearData()" class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
+                            Clear All
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats Dashboard -->
+        <div class="container mx-auto px-4 py-6">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="text-sm text-gray-600">Total Requests</div>
+                    <div class="text-2xl font-bold" x-text="stats.totalRequests"></div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="text-sm text-gray-600">Success Rate</div>
+                    <div class="text-2xl font-bold text-green-600" x-text="stats.successRate"></div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="text-sm text-gray-600">Avg Duration</div>
+                    <div class="text-2xl font-bold text-blue-600" x-text="stats.avgDuration"></div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="text-sm text-gray-600">Active</div>
+                    <div class="text-2xl font-bold text-orange-600" x-text="stats.activeRequests"></div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="bg-white rounded-lg shadow p-4 mb-6">
+                <div class="flex gap-4">
+                    <select x-model="filters.status" @change="loadRequests()" class="px-3 py-2 border rounded">
+                        <option value="">All Status</option>
+                        <option value="success">Success</option>
+                        <option value="error">Error</option>
+                        <option value="pending">Pending</option>
+                    </select>
+                    <select x-model="filters.model" @change="loadRequests()" class="px-3 py-2 border rounded">
+                        <option value="">All Models</option>
+                        <option value="claude-opus-4-1-20250805">Opus 4.1</option>
+                        <option value="claude-3-5-sonnet-20241022">Sonnet 3.5</option>
+                        <option value="claude-3-5-haiku-20241022">Haiku 3.5</option>
+                    </select>
+                    <select x-model="filters.timeRange" @change="loadRequests()" class="px-3 py-2 border rounded">
+                        <option value="">All Time</option>
+                        <option value="1h">Last Hour</option>
+                        <option value="24h">Last 24 Hours</option>
+                        <option value="7d">Last 7 Days</option>
+                    </select>
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" x-model="autoRefresh" @change="toggleAutoRefresh()" class="rounded">
+                        <span>Auto Refresh</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Request List -->
+            <div class="bg-white rounded-lg shadow">
+                <table class="w-full">
+                    <thead class="bg-gray-50 border-b">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">Time</th>
+                            <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">Model</th>
+                            <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">Status</th>
+                            <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">Duration</th>
+                            <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">Tokens</th>
+                            <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">Stream</th>
+                            <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <template x-for="request in requests" :key="request.id">
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-3 text-sm" x-text="formatTime(request.timestamp)"></td>
+                                <td class="px-4 py-3 text-sm">
+                                    <span x-text="formatModel(request.request?.body?.model)"></span>
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    <span :class="{
+                                        'text-green-600': request.status === 'success',
+                                        'text-red-600': request.status === 'error',
+                                        'text-orange-600': request.status === 'pending'
+                                    }" x-text="request.status"></span>
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    <span x-text="request.metrics?.duration ? request.metrics.duration + 'ms' : '-'"></span>
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    <span x-text="formatTokens(request.metrics)"></span>
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    <span x-text="request.streamChunks?.length > 0 ? '✓ ' + request.streamChunks.length : '-'"></span>
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    <button @click="showDetails(request)" class="text-blue-600 hover:underline">
+                                        Details
+                                    </button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+                <div x-show="requests.length === 0" class="p-8 text-center text-gray-500">
+                    No requests yet
+                </div>
+            </div>
+        </div>
+
+        <!-- Detail Modal -->
+        <div x-show="selectedRequest" @click.away="selectedRequest = null" 
+             class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" x-cloak>
+            <div class="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto" @click.stop>
+                <div class="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+                    <h2 class="text-xl font-bold">Request Details</h2>
+                    <button @click="selectedRequest = null" class="text-gray-500 hover:text-gray-700">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="p-6" x-show="selectedRequest">
+                    <!-- Request Info -->
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-2">Request Information</h3>
+                        <div class="bg-gray-50 rounded p-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <span class="text-sm text-gray-600">ID:</span>
+                                    <span class="font-mono text-sm" x-text="selectedRequest?.id"></span>
+                                </div>
+                                <div>
+                                    <span class="text-sm text-gray-600">Time:</span>
+                                    <span x-text="selectedRequest?.timestamp"></span>
+                                </div>
+                                <div>
+                                    <span class="text-sm text-gray-600">Duration:</span>
+                                    <span x-text="selectedRequest?.metrics?.duration + 'ms'"></span>
+                                </div>
+                                <div>
+                                    <span class="text-sm text-gray-600">Status:</span>
+                                    <span x-text="selectedRequest?.status"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Request Headers -->
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-2">Request Headers</h3>
+                        <pre class="json-view rounded p-4 scroll-container" x-text="JSON.stringify(selectedRequest?.request?.headers, null, 2)"></pre>
+                    </div>
+
+                    <!-- Request Body -->
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-2">Request Body</h3>
+                        <pre class="json-view rounded p-4 scroll-container" x-text="JSON.stringify(selectedRequest?.request?.body, null, 2)"></pre>
+                    </div>
+
+                    <!-- Response -->
+                    <div class="mb-6" x-show="selectedRequest?.response">
+                        <h3 class="text-lg font-semibold mb-2">Response</h3>
+                        <pre class="json-view rounded p-4 scroll-container" x-text="JSON.stringify(selectedRequest?.response?.body, null, 2)"></pre>
+                    </div>
+
+                    <!-- Stream Chunks Timeline -->
+                    <div class="mb-6" x-show="selectedRequest?.streamChunks?.length > 0">
+                        <h3 class="text-lg font-semibold mb-2">Stream Chunks (<span x-text="selectedRequest?.streamChunks?.length"></span>)</h3>
+                        <div class="bg-gray-50 rounded p-4 scroll-container">
+                            <div class="chunk-timeline space-y-2">
+                                <template x-for="(chunk, index) in (selectedRequest?.streamChunks || [])" :key="index">
+                                    <div class="ml-4 p-2 bg-white rounded border">
+                                        <div class="chunk-dot"></div>
+                                        <div class="text-xs text-gray-500" x-text="chunk.timestamp"></div>
+                                        <pre class="text-xs mt-1" x-text="formatChunk(chunk.data)"></pre>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Merged Content -->
+                    <div class="mb-6" x-show="selectedRequest?.mergedContent">
+                        <h3 class="text-lg font-semibold mb-2">Merged Content</h3>
+                        <pre class="json-view rounded p-4 scroll-container" x-text="JSON.stringify(selectedRequest?.mergedContent, null, 2)"></pre>
+                    </div>
+
+                    <!-- Error -->
+                    <div class="mb-6" x-show="selectedRequest?.error">
+                        <h3 class="text-lg font-semibold mb-2 text-red-600">Error</h3>
+                        <pre class="bg-red-50 text-red-800 rounded p-4" x-text="JSON.stringify(selectedRequest?.error, null, 2)"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function monitorApp() {
+            return {
+                requests: [],
+                stats: {},
+                filters: {
+                    status: '',
+                    model: '',
+                    timeRange: ''
+                },
+                selectedRequest: null,
+                autoRefresh: true,
+                eventSource: null,
+                refreshInterval: null,
+
+                async init() {
+                    await this.loadStats();
+                    await this.loadRequests();
+                    this.startRealTimeUpdates();
+                    
+                    if (this.autoRefresh) {
+                        this.startAutoRefresh();
+                    }
+                },
+
+                async loadStats() {
+                    try {
+                        const response = await fetch('/api/monitor/stats');
+                        this.stats = await response.json();
+                    } catch (error) {
+                        console.error('Failed to load stats:', error);
+                    }
+                },
+
+                async loadRequests() {
+                    try {
+                        const params = new URLSearchParams(this.filters);
+                        const response = await fetch('/api/monitor/requests?' + params);
+                        const data = await response.json();
+                        this.requests = data.data;
+                    } catch (error) {
+                        console.error('Failed to load requests:', error);
+                    }
+                },
+
+                startRealTimeUpdates() {
+                    this.eventSource = new EventSource('/api/monitor/stream');
+                    
+                    this.eventSource.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.type === 'request') {
+                            // Add or update request
+                            const index = this.requests.findIndex(r => r.id === data.request.id);
+                            if (index >= 0) {
+                                this.requests[index] = data.request;
+                            } else {
+                                this.requests.unshift(data.request);
+                                // Keep max 100 items in view
+                                if (this.requests.length > 100) {
+                                    this.requests.pop();
+                                }
+                            }
+                        } else if (data.type === 'stats') {
+                            this.stats = data.stats;
+                        }
+                    };
+                },
+
+                startAutoRefresh() {
+                    this.refreshInterval = setInterval(() => {
+                        this.loadStats();
+                    }, 5000);
+                },
+
+                toggleAutoRefresh() {
+                    if (this.autoRefresh) {
+                        this.startAutoRefresh();
+                    } else {
+                        if (this.refreshInterval) {
+                            clearInterval(this.refreshInterval);
+                            this.refreshInterval = null;
+                        }
+                    }
+                },
+
+                showDetails(request) {
+                    this.selectedRequest = request;
+                },
+
+                formatTime(timestamp) {
+                    const date = new Date(timestamp);
+                    return date.toLocaleTimeString();
+                },
+
+                formatModel(model) {
+                    if (!model) return '-';
+                    if (model.includes('opus')) return 'Opus';
+                    if (model.includes('sonnet')) return 'Sonnet';
+                    if (model.includes('haiku')) return 'Haiku';
+                    return model;
+                },
+
+                formatTokens(metrics) {
+                    if (!metrics) return '-';
+                    const input = metrics.inputTokens || 0;
+                    const output = metrics.outputTokens || 0;
+                    if (input === 0 && output === 0) return '-';
+                    return \`\${input}/\${output}\`;
+                },
+
+                formatChunk(chunkData) {
+                    try {
+                        const parsed = JSON.parse(chunkData);
+                        return JSON.stringify(parsed, null, 2);
+                    } catch {
+                        return chunkData;
+                    }
+                },
+
+                async exportData() {
+                    try {
+                        const response = await fetch('/api/monitor/export');
+                        const data = await response.json();
+                        
+                        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = \`proxy-monitor-\${Date.now()}.json\`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                    } catch (error) {
+                        console.error('Failed to export data:', error);
+                    }
+                },
+
+                async clearData() {
+                    if (confirm('Are you sure you want to clear all monitoring data?')) {
+                        try {
+                            await fetch('/api/monitor/clear', { method: 'POST' });
+                            this.requests = [];
+                            await this.loadStats();
+                        } catch (error) {
+                            console.error('Failed to clear data:', error);
+                        }
+                    }
+                }
+            };
+        }
+    </script>
+</body>
+</html>`;
+}
