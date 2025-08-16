@@ -39,6 +39,12 @@ export class RequestStore extends EventEmitter {
     return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
+  // Utility to calculate object size in bytes
+  calculateSize(obj) {
+    if (!obj) return 0;
+    return new Blob([JSON.stringify(obj)]).size;
+  }
+
   // Start tracking a request
   startRequest(req) {
     const id = this.generateId();
@@ -53,6 +59,9 @@ export class RequestStore extends EventEmitter {
       }
     });
 
+    const requestBody = req.body;
+    const requestSize = this.calculateSize(requestBody) + this.calculateSize(maskedHeaders);
+
     const requestData = {
       id,
       timestamp: new Date().toISOString(),
@@ -61,7 +70,7 @@ export class RequestStore extends EventEmitter {
       url: req.url,
       request: {
         headers: maskedHeaders,
-        body: req.body
+        body: requestBody
       },
       response: null,
       streamChunks: [],
@@ -71,7 +80,10 @@ export class RequestStore extends EventEmitter {
         inputTokens: 0,
         outputTokens: 0,
         firstChunkTime: null,
-        chunksCount: 0
+        chunksCount: 0,
+        requestSize: requestSize,
+        responseSize: 0,
+        totalSize: requestSize
       },
       status: 'pending',
       error: null
@@ -104,6 +116,11 @@ export class RequestStore extends EventEmitter {
       headers: responseData.headers,
       body: responseData.body
     };
+    
+    // Calculate response size
+    const responseSize = this.calculateSize(responseData.body) + this.calculateSize(responseData.headers);
+    request.metrics.responseSize = responseSize;
+    request.metrics.totalSize = request.metrics.requestSize + responseSize;
     
     request.metrics.duration = duration;
     request.status = responseData.status >= 200 && responseData.status < 300 ? 'success' : 'error';
@@ -154,6 +171,12 @@ export class RequestStore extends EventEmitter {
     if (!request) return;
     
     request.mergedContent = mergedContent;
+    
+    // Calculate streaming response size
+    const streamSize = this.calculateSize(mergedContent) + 
+                      request.streamChunks.reduce((total, chunk) => total + this.calculateSize(chunk.data), 0);
+    request.metrics.responseSize = streamSize;
+    request.metrics.totalSize = request.metrics.requestSize + streamSize;
     
     // Extract token counts from merged content if available
     if (mergedContent.usage) {

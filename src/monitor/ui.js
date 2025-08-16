@@ -124,6 +124,7 @@ export function getMonitorHTML() {
                             <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">Status</th>
                             <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">Duration</th>
                             <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">Tokens</th>
+                            <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">Size</th>
                             <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">Stream</th>
                             <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">Actions</th>
                         </tr>
@@ -147,6 +148,9 @@ export function getMonitorHTML() {
                                 </td>
                                 <td class="px-4 py-3 text-sm">
                                     <span x-text="formatTokens(request.metrics)"></span>
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    <span x-text="formatBytes(request.metrics?.totalSize)" class="text-gray-600"></span>
                                 </td>
                                 <td class="px-4 py-3 text-sm">
                                     <span x-text="request.streamChunks?.length > 0 ? '✓ ' + request.streamChunks.length : '-'"></span>
@@ -182,9 +186,18 @@ export function getMonitorHTML() {
                 <div class="p-6" x-show="selectedRequest">
                     <!-- Request Info -->
                     <div class="mb-6">
-                        <h3 class="text-lg font-semibold mb-2">Request Information</h3>
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-lg font-semibold">Request Information</h3>
+                            <button @click="copyToClipboard(getRequestInfo(selectedRequest), 'Request Info')" 
+                                    class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                                Copy
+                            </button>
+                        </div>
                         <div class="bg-gray-50 rounded p-4">
-                            <div class="grid grid-cols-2 gap-4">
+                            <div class="grid grid-cols-3 gap-4">
                                 <div>
                                     <span class="text-sm text-gray-600">ID:</span>
                                     <span class="font-mono text-sm" x-text="selectedRequest?.id"></span>
@@ -201,37 +214,99 @@ export function getMonitorHTML() {
                                     <span class="text-sm text-gray-600">Status:</span>
                                     <span x-text="selectedRequest?.status"></span>
                                 </div>
+                                <div>
+                                    <span class="text-sm text-gray-600">Request Size:</span>
+                                    <span x-text="formatBytes(selectedRequest?.metrics?.requestSize)"></span>
+                                </div>
+                                <div>
+                                    <span class="text-sm text-gray-600">Response Size:</span>
+                                    <span x-text="formatBytes(selectedRequest?.metrics?.responseSize)"></span>
+                                </div>
+                                <div>
+                                    <span class="text-sm text-gray-600">Total Size:</span>
+                                    <span class="font-semibold" x-text="formatBytes(selectedRequest?.metrics?.totalSize)"></span>
+                                </div>
+                                <div>
+                                    <span class="text-sm text-gray-600">Input Tokens:</span>
+                                    <span x-text="selectedRequest?.metrics?.inputTokens || 0"></span>
+                                </div>
+                                <div>
+                                    <span class="text-sm text-gray-600">Output Tokens:</span>
+                                    <span x-text="selectedRequest?.metrics?.outputTokens || 0"></span>
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     <!-- Request Headers -->
                     <div class="mb-6">
-                        <h3 class="text-lg font-semibold mb-2">Request Headers</h3>
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-lg font-semibold">Request Headers</h3>
+                            <button @click="copyToClipboard(JSON.stringify(selectedRequest?.request?.headers, null, 2), 'Request Headers')" 
+                                    class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                                Copy
+                            </button>
+                        </div>
                         <pre class="json-view rounded p-4 scroll-container" x-text="JSON.stringify(selectedRequest?.request?.headers, null, 2)"></pre>
                     </div>
 
                     <!-- Request Body -->
                     <div class="mb-6">
-                        <h3 class="text-lg font-semibold mb-2">Request Body</h3>
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-lg font-semibold">Request Body</h3>
+                            <button @click="copyToClipboard(JSON.stringify(selectedRequest?.request?.body, null, 2), 'Request Body')" 
+                                    class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                                Copy
+                            </button>
+                        </div>
                         <pre class="json-view rounded p-4 scroll-container" x-text="JSON.stringify(selectedRequest?.request?.body, null, 2)"></pre>
                     </div>
 
                     <!-- Response -->
                     <div class="mb-6" x-show="selectedRequest?.response">
-                        <h3 class="text-lg font-semibold mb-2">Response</h3>
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-lg font-semibold">Response</h3>
+                            <button @click="copyToClipboard(JSON.stringify(selectedRequest?.response?.body, null, 2), 'Response')" 
+                                    class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                                Copy
+                            </button>
+                        </div>
                         <pre class="json-view rounded p-4 scroll-container" x-text="JSON.stringify(selectedRequest?.response?.body, null, 2)"></pre>
                     </div>
 
                     <!-- Stream Chunks Timeline -->
                     <div class="mb-6" x-show="selectedRequest?.streamChunks?.length > 0">
-                        <h3 class="text-lg font-semibold mb-2">Stream Chunks (<span x-text="selectedRequest?.streamChunks?.length"></span>)</h3>
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-lg font-semibold">Stream Chunks (<span x-text="selectedRequest?.streamChunks?.length"></span>)</h3>
+                            <button @click="copyToClipboard(getStreamChunksText(selectedRequest?.streamChunks), 'Stream Chunks')" 
+                                    class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                                Copy All
+                            </button>
+                        </div>
                         <div class="bg-gray-50 rounded p-4 scroll-container">
                             <div class="chunk-timeline space-y-2">
                                 <template x-for="(chunk, index) in (selectedRequest?.streamChunks || [])" :key="index">
-                                    <div class="ml-4 p-2 bg-white rounded border">
+                                    <div class="ml-4 p-2 bg-white rounded border relative">
                                         <div class="chunk-dot"></div>
-                                        <div class="text-xs text-gray-500" x-text="chunk.timestamp"></div>
+                                        <div class="flex justify-between items-center">
+                                            <div class="text-xs text-gray-500" x-text="chunk.timestamp"></div>
+                                            <button @click="copyToClipboard(formatChunk(chunk.data), 'Chunk ' + (index + 1))" 
+                                                    class="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300">
+                                                Copy
+                                            </button>
+                                        </div>
                                         <pre class="text-xs mt-1" x-text="formatChunk(chunk.data)"></pre>
                                     </div>
                                 </template>
@@ -241,13 +316,31 @@ export function getMonitorHTML() {
 
                     <!-- Merged Content -->
                     <div class="mb-6" x-show="selectedRequest?.mergedContent">
-                        <h3 class="text-lg font-semibold mb-2">Merged Content</h3>
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-lg font-semibold">Merged Content</h3>
+                            <button @click="copyToClipboard(JSON.stringify(selectedRequest?.mergedContent, null, 2), 'Merged Content')" 
+                                    class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                                Copy
+                            </button>
+                        </div>
                         <pre class="json-view rounded p-4 scroll-container" x-text="JSON.stringify(selectedRequest?.mergedContent, null, 2)"></pre>
                     </div>
 
                     <!-- Error -->
                     <div class="mb-6" x-show="selectedRequest?.error">
-                        <h3 class="text-lg font-semibold mb-2 text-red-600">Error</h3>
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-lg font-semibold text-red-600">Error</h3>
+                            <button @click="copyToClipboard(JSON.stringify(selectedRequest?.error, null, 2), 'Error Details')" 
+                                    class="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600 flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                                Copy
+                            </button>
+                        </div>
                         <pre class="bg-red-50 text-red-800 rounded p-4" x-text="JSON.stringify(selectedRequest?.error, null, 2)"></pre>
                     </div>
                 </div>
@@ -373,6 +466,60 @@ export function getMonitorHTML() {
                     } catch {
                         return chunkData;
                     }
+                },
+
+                formatBytes(bytes) {
+                    if (!bytes || bytes === 0) return '0 B';
+                    const k = 1024;
+                    const sizes = ['B', 'KB', 'MB', 'GB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                },
+
+                getRequestInfo(request) {
+                    if (!request) return '';
+                    return JSON.stringify({
+                        id: request.id,
+                        timestamp: request.timestamp,
+                        method: request.method,
+                        url: request.url,
+                        status: request.status,
+                        metrics: request.metrics
+                    }, null, 2);
+                },
+
+                getStreamChunksText(chunks) {
+                    if (!chunks || chunks.length === 0) return '';
+                    return chunks.map((chunk, index) => 
+                        \`=== Chunk \${index + 1} [\${chunk.timestamp}] ===\\n\${this.formatChunk(chunk.data)}\`
+                    ).join('\\n\\n');
+                },
+
+                async copyToClipboard(text, label) {
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        this.showNotification(\`\${label} copied to clipboard!\`, 'success');
+                    } catch (error) {
+                        console.error('Copy failed:', error);
+                        this.showNotification('Copy failed. Please try again.', 'error');
+                    }
+                },
+
+                showNotification(message, type = 'info') {
+                    // Create a simple notification
+                    const notification = document.createElement('div');
+                    notification.className = \`fixed top-4 right-4 z-50 px-4 py-2 rounded shadow-lg text-white \${
+                        type === 'success' ? 'bg-green-500' : 
+                        type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+                    }\`;
+                    notification.textContent = message;
+                    
+                    document.body.appendChild(notification);
+                    
+                    // Auto remove after 3 seconds
+                    setTimeout(() => {
+                        notification.remove();
+                    }, 3000);
                 },
 
                 async exportData() {
