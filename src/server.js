@@ -132,9 +132,9 @@ app.post('/v1/messages', async (req, res) => {
     // Forward all headers from Claude Code
     const headers = getForwardedHeaders(req);
     
-    // Log COMPLETE request body
-    logger.info('Request Body (COMPLETE):');
-    logger.info(JSON.stringify(req.body, null, 2));
+    // Log COMPLETE request body (DEBUG only)
+    logger.debug('Request Body (COMPLETE):');
+    logger.debug(JSON.stringify(req.body, null, 2));
     logger.info('='.repeat(60));
     
     if (req.body.stream) {
@@ -156,8 +156,8 @@ app.post('/v1/messages', async (req, res) => {
         logger.error('='.repeat(60));
         logger.error('❌ ERROR RESPONSE FROM ANTHROPIC');
         logger.error(`Status Code: ${response.status}`);
-        logger.error(`Response Headers: ${JSON.stringify(response.headers)}`);
-        logger.error(`Response Body: ${JSON.stringify(response.data)}`);
+        logger.debug(`Response Headers: ${JSON.stringify(response.headers)}`);
+        logger.debug(`Response Body: ${JSON.stringify(response.data)}`);
         logger.error('='.repeat(60));
         
         res.status(response.status).json(response.data);
@@ -168,9 +168,9 @@ app.post('/v1/messages', async (req, res) => {
       logger.info('='.repeat(60));
       logger.info('✅ SUCCESSFUL RESPONSE FROM ANTHROPIC');
       logger.info(`Status Code: ${response.status}`);
-      logger.info(`Response Headers: ${JSON.stringify(response.headers)}`);
-      logger.info('Response Body (COMPLETE):');
-      logger.info(JSON.stringify(response.data, null, 2));
+      logger.debug(`Response Headers: ${JSON.stringify(response.headers)}`);
+      logger.debug('Response Body (COMPLETE):');
+      logger.debug(JSON.stringify(response.data, null, 2));
       logger.info('='.repeat(60));
       
       // Update monitor with response
@@ -275,11 +275,11 @@ async function handleStreamingResponse(headers, requestData, req, res) {
         if (responseEnded || streamDestroyed) return;
         
         if (line.trim()) {
-          // Log COMPLETE chunk content
+          // Log COMPLETE chunk content (DEBUG only)
           if (line.startsWith('data: ')) {
             const chunkData = line.substring(6);
             if (chunkData.trim() && chunkData.trim() !== '[DONE]') {
-              logger.info(`📤 Stream chunk: ${chunkData}`);
+              logger.debug(`📤 Stream chunk: ${chunkData}`);
               collectedResponse.push(chunkData);
               
               // Add to monitor
@@ -358,7 +358,7 @@ async function handleStreamingResponse(headers, requestData, req, res) {
           }
         });
         
-        // Output merged complete content as JSON
+        // Output merged complete content as JSON (DEBUG only)
         logger.info('='.repeat(60));
         logger.info('🔗 MERGED COMPLETE CONTENT (JSON):');
         
@@ -370,18 +370,18 @@ async function handleStreamingResponse(headers, requestData, req, res) {
           timestamp: new Date().toISOString()
         };
         
-        logger.info(JSON.stringify(mergedContent, null, 2));
+        logger.debug(JSON.stringify(mergedContent, null, 2));
         
         // Save merged content to monitor
         if (req.monitorId) {
           requestStore.setMergedContent(req.monitorId, mergedContent);
         }
         
-        // Also log individual chunks for debugging
-        logger.info('='.repeat(60));
-        logger.info('📦 INDIVIDUAL CHUNKS (for debugging):');
+        // Also log individual chunks for debugging (DEBUG only)
+        logger.debug('='.repeat(60));
+        logger.debug('📦 INDIVIDUAL CHUNKS (for debugging):');
         collectedResponse.forEach((chunk, i) => {
-          logger.info(`Chunk ${i + 1}: ${chunk}`);
+          logger.debug(`Chunk ${i + 1}: ${chunk}`);
         });
       }
       
@@ -470,8 +470,8 @@ app.post('/v1/messages/count_tokens', async (req, res) => {
   try {
     logger.info('='.repeat(60));
     logger.info('🔢 TOKEN COUNT REQUEST');
-    logger.info('Request (COMPLETE):');
-    logger.info(JSON.stringify(req.body, null, 2));
+    logger.debug('Request (COMPLETE):');
+    logger.debug(JSON.stringify(req.body, null, 2));
     logger.info('='.repeat(60));
     
     // Forward all headers from Claude Code
@@ -495,8 +495,8 @@ app.post('/v1/messages/count_tokens', async (req, res) => {
     
     logger.info('='.repeat(60));
     logger.info('✅ TOKEN COUNT RESPONSE');
-    logger.info('Result (COMPLETE):');
-    logger.info(JSON.stringify(response.data, null, 2));
+    logger.debug('Result (COMPLETE):');
+    logger.debug(JSON.stringify(response.data, null, 2));
     logger.info('='.repeat(60));
     
     res.json(response.data);

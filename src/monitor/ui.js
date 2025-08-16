@@ -131,7 +131,10 @@ export function getMonitorHTML() {
                     </thead>
                     <tbody class="divide-y">
                         <template x-for="request in requests" :key="request.id">
-                            <tr class="hover:bg-gray-50">
+                            <tr :class="{
+                                'bg-blue-50 border-l-4 border-l-blue-500': selectedRequest?.id === request.id,
+                                'hover:bg-gray-50': selectedRequest?.id !== request.id
+                            }" class="cursor-pointer transition-colors" @click="showDetails(request)">
                                 <td class="px-4 py-3 text-sm" x-text="formatTime(request.timestamp)"></td>
                                 <td class="px-4 py-3 text-sm">
                                     <span x-text="formatModel(request.request?.body?.model)"></span>
@@ -156,7 +159,7 @@ export function getMonitorHTML() {
                                     <span x-text="request.streamChunks?.length > 0 ? '✓ ' + request.streamChunks.length : '-'"></span>
                                 </td>
                                 <td class="px-4 py-3 text-sm">
-                                    <button @click="showDetails(request)" class="text-blue-600 hover:underline">
+                                    <button @click.stop="showDetails(request)" class="text-blue-600 hover:underline">
                                         Details
                                     </button>
                                 </td>
