@@ -97,9 +97,9 @@ export function getMonitorHTML() {
                     </select>
                     <select x-model="filters.model" @change="loadRequests()" class="px-3 py-2 border rounded">
                         <option value="">All Models</option>
-                        <option value="claude-opus-4-1-20250805">Opus 4.1</option>
-                        <option value="claude-3-5-sonnet-20241022">Sonnet 3.5</option>
-                        <option value="claude-3-5-haiku-20241022">Haiku 3.5</option>
+                        <template x-for="model in availableModels" :key="model.value">
+                            <option :value="model.value" x-text="model.label"></option>
+                        </template>
                     </select>
                     <select x-model="filters.timeRange" @change="loadRequests()" class="px-3 py-2 border rounded">
                         <option value="">All Time</option>
@@ -132,8 +132,8 @@ export function getMonitorHTML() {
                     <tbody class="divide-y">
                         <template x-for="request in requests" :key="request.id">
                             <tr :class="{
-                                'bg-blue-50 border-l-4 border-l-blue-500': selectedRequest?.id === request.id,
-                                'hover:bg-gray-50': selectedRequest?.id !== request.id
+                                'bg-blue-50 border-l-4 border-l-blue-500': selectedRequestId === request.id,
+                                'hover:bg-gray-50': selectedRequestId !== request.id
                             }" class="cursor-pointer transition-colors" @click="showDetails(request)">
                                 <td class="px-4 py-3 text-sm" x-text="formatTime(request.timestamp)"></td>
                                 <td class="px-4 py-3 text-sm">
@@ -174,12 +174,12 @@ export function getMonitorHTML() {
         </div>
 
         <!-- Detail Modal -->
-        <div x-show="selectedRequest" @click.away="selectedRequest = null" 
+        <div x-show="selectedRequest" @click="closeModal()" 
              class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" x-cloak>
             <div class="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto" @click.stop>
                 <div class="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
                     <h2 class="text-xl font-bold">Request Details</h2>
-                    <button @click="selectedRequest = null" class="text-gray-500 hover:text-gray-700">
+                    <button @click="closeModal()" class="text-gray-500 hover:text-gray-700">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
@@ -362,9 +362,11 @@ export function getMonitorHTML() {
                     timeRange: ''
                 },
                 selectedRequest: null,
+                selectedRequestId: null,
                 autoRefresh: true,
                 eventSource: null,
                 refreshInterval: null,
+                availableModels: [],
 
                 async init() {
                     await this.loadStats();
@@ -391,9 +393,55 @@ export function getMonitorHTML() {
                         const response = await fetch('/api/monitor/requests?' + params);
                         const data = await response.json();
                         this.requests = data.data;
+                        this.updateAvailableModels();
                     } catch (error) {
                         console.error('Failed to load requests:', error);
                     }
+                },
+
+                updateAvailableModels() {
+                    const modelsSet = new Set();
+                    this.requests.forEach(request => {
+                        const model = request.request?.body?.model;
+                        if (model) {
+                            modelsSet.add(model);
+                        }
+                    });
+                    
+                    this.availableModels = Array.from(modelsSet).map(model => ({
+                        value: model,
+                        label: this.getModelDisplayName(model)
+                    })).sort((a, b) => a.label.localeCompare(b.label));
+                },
+
+                getModelDisplayName(model) {
+                    if (!model) return 'Unknown';
+                    
+                    // Claude 4 models
+                    if (model.includes('claude-4') || model.includes('opus-4')) {
+                        if (model.includes('sonnet')) return 'Claude 4 Sonnet';
+                        if (model.includes('opus')) return 'Claude 4 Opus';
+                        if (model.includes('haiku')) return 'Claude 4 Haiku';
+                        return 'Claude 4';
+                    }
+                    
+                    // Claude 3.5 models
+                    if (model.includes('claude-3-5') || model.includes('3.5')) {
+                        if (model.includes('sonnet')) return 'Claude 3.5 Sonnet';
+                        if (model.includes('haiku')) return 'Claude 3.5 Haiku';
+                        return 'Claude 3.5';
+                    }
+                    
+                    // Claude 3 models
+                    if (model.includes('claude-3')) {
+                        if (model.includes('opus')) return 'Claude 3 Opus';
+                        if (model.includes('sonnet')) return 'Claude 3 Sonnet';
+                        if (model.includes('haiku')) return 'Claude 3 Haiku';
+                        return 'Claude 3';
+                    }
+                    
+                    // Fallback: return the original model name
+                    return model;
                 },
 
                 startRealTimeUpdates() {
@@ -413,6 +461,8 @@ export function getMonitorHTML() {
                                 if (this.requests.length > 100) {
                                     this.requests.pop();
                                 }
+                                // Update available models when new requests come in
+                                this.updateAvailableModels();
                             }
                         } else if (data.type === 'stats') {
                             this.stats = data.stats;
@@ -439,6 +489,12 @@ export function getMonitorHTML() {
 
                 showDetails(request) {
                     this.selectedRequest = request;
+                    this.selectedRequestId = request.id;
+                },
+
+                closeModal() {
+                    this.selectedRequest = null;
+                    // Keep selectedRequestId to maintain row highlighting
                 },
 
                 formatTime(timestamp) {
@@ -547,6 +603,9 @@ export function getMonitorHTML() {
                         try {
                             await fetch('/api/monitor/clear', { method: 'POST' });
                             this.requests = [];
+                            this.selectedRequest = null;
+                            this.selectedRequestId = null;
+                            this.availableModels = [];
                             await this.loadStats();
                         } catch (error) {
                             console.error('Failed to clear data:', error);

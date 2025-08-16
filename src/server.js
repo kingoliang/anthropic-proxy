@@ -692,20 +692,49 @@ function main() {
   });
   
   // Handle graceful shutdown
-  process.on('SIGTERM', () => {
-    logger.info('SIGTERM signal received: closing HTTP server');
-    server.close(() => {
-      logger.info('HTTP server closed');
+  let isShuttingDown = false;
+  
+  const gracefulShutdown = (signal) => {
+    if (isShuttingDown) {
+      logger.warn('Force shutdown - exiting immediately');
+      process.exit(1);
+    }
+    
+    isShuttingDown = true;
+    logger.info(`${signal} signal received: starting graceful shutdown`);
+    
+    // Set a timeout to force exit if graceful shutdown takes too long
+    const forceExitTimeout = setTimeout(() => {
+      logger.error('Graceful shutdown timeout - forcing exit');
+      process.exit(1);
+    }, 10000); // 10 seconds timeout
+    
+    server.close((err) => {
+      clearTimeout(forceExitTimeout);
+      if (err) {
+        logger.error('Error during server shutdown:', err);
+        process.exit(1);
+      }
+      logger.info('HTTP server closed successfully');
       process.exit(0);
     });
+    
+    // Also close any active connections
+    server.closeAllConnections?.();
+  };
+  
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  
+  // Handle uncaught exceptions
+  process.on('uncaughtException', (err) => {
+    logger.error('Uncaught Exception:', err);
+    gracefulShutdown('UNCAUGHT_EXCEPTION');
   });
   
-  process.on('SIGINT', () => {
-    logger.info('SIGINT signal received: closing HTTP server');
-    server.close(() => {
-      logger.info('HTTP server closed');
-      process.exit(0);
-    });
+  process.on('unhandledRejection', (reason, promise) => {
+    logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    gracefulShutdown('UNHANDLED_REJECTION');
   });
 }
 
