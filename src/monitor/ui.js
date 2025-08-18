@@ -67,7 +67,7 @@ export function getMonitorHTML() {
 
         <!-- Stats Dashboard -->
         <div class="container mx-auto px-4 py-6">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                 <div class="bg-white rounded-lg shadow p-4">
                     <div class="text-sm text-gray-600">Total Requests</div>
                     <div class="text-2xl font-bold" x-text="stats.totalRequests"></div>
@@ -83,6 +83,10 @@ export function getMonitorHTML() {
                 <div class="bg-white rounded-lg shadow p-4">
                     <div class="text-sm text-gray-600">Active</div>
                     <div class="text-2xl font-bold text-orange-600" x-text="stats.activeRequests"></div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="text-sm text-gray-600">Total Size</div>
+                    <div class="text-2xl font-bold text-purple-600" x-text="formatSize(calculateTotalSize())"></div>
                 </div>
             </div>
 
@@ -242,9 +246,14 @@ export function getMonitorHTML() {
                     </div>
 
                     <!-- Request Headers -->
-                    <div class="mb-6">
+                    <div class="mb-6" x-data="{ expanded: false }">
                         <div class="flex justify-between items-center mb-2">
-                            <h3 class="text-lg font-semibold">Request Headers</h3>
+                            <button @click="expanded = !expanded" class="flex items-center gap-2 text-lg font-semibold hover:text-blue-600">
+                                <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-90': expanded }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                                Request Headers
+                            </button>
                             <button @click="copyToClipboard(JSON.stringify(selectedRequest?.request?.headers, null, 2), 'Request Headers')" 
                                     class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -253,7 +262,7 @@ export function getMonitorHTML() {
                                 Copy
                             </button>
                         </div>
-                        <pre class="json-view rounded p-4 scroll-container" x-text="JSON.stringify(selectedRequest?.request?.headers, null, 2)"></pre>
+                        <pre x-show="expanded" x-transition class="json-view rounded p-4 scroll-container" x-text="JSON.stringify(selectedRequest?.request?.headers, null, 2)"></pre>
                     </div>
 
                     <!-- Request Body -->
@@ -286,8 +295,8 @@ export function getMonitorHTML() {
                         <pre class="json-view rounded p-4 scroll-container" x-text="JSON.stringify(selectedRequest?.response?.body, null, 2)"></pre>
                     </div>
 
-                    <!-- Stream Chunks Timeline -->
-                    <div class="mb-6" x-show="selectedRequest?.streamChunks?.length > 0">
+                    <!-- Stream Chunks Timeline (Only in DEBUG mode) -->
+                    <div class="mb-6" x-show="selectedRequest?.streamChunks?.length > 0 && isDebugMode">
                         <div class="flex justify-between items-center mb-2">
                             <h3 class="text-lg font-semibold">Stream Chunks (<span x-text="selectedRequest?.streamChunks?.length"></span>)</h3>
                             <button @click="copyToClipboard(getStreamChunksText(selectedRequest?.streamChunks), 'Stream Chunks')" 
@@ -367,14 +376,26 @@ export function getMonitorHTML() {
                 eventSource: null,
                 refreshInterval: null,
                 availableModels: [],
+                isDebugMode: false,
 
                 async init() {
+                    await this.loadConfig();
                     await this.loadStats();
                     await this.loadRequests();
                     this.startRealTimeUpdates();
                     
                     if (this.autoRefresh) {
                         this.startAutoRefresh();
+                    }
+                },
+
+                async loadConfig() {
+                    try {
+                        const response = await fetch('/api/monitor/config');
+                        const config = await response.json();
+                        this.isDebugMode = config.logLevel === 'DEBUG';
+                    } catch (error) {
+                        console.error('Failed to load config:', error);
                     }
                 },
 
@@ -508,6 +529,22 @@ export function getMonitorHTML() {
                     if (model.includes('sonnet')) return 'Sonnet';
                     if (model.includes('haiku')) return 'Haiku';
                     return model;
+                },
+
+                formatSize(bytes) {
+                    if (!bytes || bytes === 0) return '0 B';
+                    const k = 1024;
+                    const sizes = ['B', 'KB', 'MB', 'GB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
+                },
+
+                calculateTotalSize() {
+                    return this.requests.reduce((total, request) => {
+                        const reqSize = request.metrics?.requestSize || 0;
+                        const resSize = request.metrics?.responseSize || 0;
+                        return total + reqSize + resSize;
+                    }, 0);
                 },
 
                 formatTokens(metrics) {

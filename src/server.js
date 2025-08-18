@@ -576,6 +576,14 @@ app.get('/api/monitor/requests/:id', (req, res) => {
   }
 });
 
+app.get('/api/monitor/config', (req, res) => {
+  res.json({
+    logLevel: LOG_LEVEL,
+    port: PORT,
+    host: HOST
+  });
+});
+
 app.get('/api/monitor/stats', (req, res) => {
   try {
     const stats = requestStore.getStats();
