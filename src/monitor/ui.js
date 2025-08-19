@@ -57,6 +57,9 @@ export function getMonitorHTML() {
                         <button @click="exportData()" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
                             Export Data
                         </button>
+                        <button @click="exportCompressData()" class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">
+                            Export Compress Data
+                        </button>
                         <button @click="clearData()" class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
                             Clear All
                         </button>
@@ -635,6 +638,28 @@ export function getMonitorHTML() {
                     }
                 },
 
+                async exportCompressData() {
+                    try {
+                        const response = await fetch('/api/monitor/export');
+                        const data = await response.json();
+                        
+                        // 使用增量去重算法压缩数据
+                        const compressedResult = this.performIncrementalDeduplication(data);
+                        
+                        // 只导出压缩后的数据
+                        const compressedBlob = new Blob([JSON.stringify(compressedResult.compressedData, null, 2)], { type: 'application/json' });
+                        const compressedUrl = URL.createObjectURL(compressedBlob);
+                        const compressedLink = document.createElement('a');
+                        compressedLink.href = compressedUrl;
+                        compressedLink.download = \`proxy-monitor-compressed-\${Date.now()}.json\`;
+                        compressedLink.click();
+                        URL.revokeObjectURL(compressedUrl);
+                        
+                    } catch (error) {
+                        console.error('Failed to export compressed data:', error);
+                    }
+                },
+
                 async clearData() {
                     if (confirm('Are you sure you want to clear all monitoring data?')) {
                         try {
@@ -648,6 +673,240 @@ export function getMonitorHTML() {
                             console.error('Failed to clear data:', error);
                         }
                     }
+                },
+
+                // 增量去重相关方法
+                performIncrementalDeduplication(data) {
+                    const requests = data.requests || [];
+                    const excludedFields = new Set(['streamChunks', 'tools']);
+                    const seenValues = {};
+                    const fieldHistory = {};
+                    const compressionStats = {
+                        originalFields: 0,
+                        removedFields: 0,
+                        uniqueFields: 0,
+                        excludedFields: 0
+                    };
+                    
+                    const compressedRequests = [];
+                    const removalLog = {};
+                    
+                    for (let i = 0; i < requests.length; i++) {
+                        const request = requests[i];
+                        const requestId = request.id || \`req_\${i}\`;
+                        
+                        // 移除排除字段并统计
+                        const cleanedRequest = this.removeExcludedFields(request, excludedFields, compressionStats);
+                        
+                        // 提取所有字段
+                        const allFields = this.extractAllFields(cleanedRequest);
+                        compressionStats.originalFields += Object.keys(allFields).length;
+                        
+                        // 处理去重
+                        const { compressedRequest, removedFields } = this.processRequestDeduplication(
+                            cleanedRequest, allFields, seenValues, fieldHistory, requestId, compressionStats
+                        );
+                        
+                        // 清理空结构
+                        const finalRequest = this.cleanEmptyStructures(compressedRequest);
+                        compressedRequests.push(finalRequest);
+                        
+                        if (Object.keys(removedFields).length > 0) {
+                            removalLog[requestId] = removedFields;
+                        }
+                    }
+                    
+                    const compressionRatio = compressionStats.originalFields > 0 
+                        ? (compressionStats.removedFields / compressionStats.originalFields * 100) 
+                        : 0;
+                    
+                    return {
+                        compressedData: {
+                            compressionInfo: {
+                                method: 'incremental_field_deduplication',
+                                originalRequests: requests.length,
+                                compressedRequests: compressedRequests.length,
+                                stats: {
+                                    ...compressionStats,
+                                    compressionRatio: compressionRatio.toFixed(2) + '%'
+                                },
+                                compressionTime: new Date().toISOString()
+                            },
+                            requests: compressedRequests
+                        },
+                        removalMapping: {
+                            restorationInfo: {
+                                description: '用于恢复被移除字段的映射信息',
+                                totalRemovedFields: compressionStats.removedFields,
+                                fieldHistory: fieldHistory
+                            },
+                            removalLog: removalLog
+                        },
+                        stats: compressionStats
+                    };
+                },
+
+                removeExcludedFields(obj, excludedFields, stats) {
+                    if (typeof obj !== 'object' || obj === null) return obj;
+                    
+                    if (Array.isArray(obj)) {
+                        return obj.map(item => this.removeExcludedFields(item, excludedFields, stats));
+                    }
+                    
+                    const cleaned = {};
+                    for (const [key, value] of Object.entries(obj)) {
+                        if (excludedFields.has(key)) {
+                            stats.excludedFields += this.countFields(value);
+                            continue;
+                        }
+                        
+                        if (typeof value === 'object' && value !== null) {
+                            const cleanedValue = this.removeExcludedFields(value, excludedFields, stats);
+                            if (cleanedValue !== null && 
+                                (typeof cleanedValue !== 'object' || 
+                                 Object.keys(cleanedValue).length > 0 || 
+                                 Array.isArray(cleanedValue))) {
+                                cleaned[key] = cleanedValue;
+                            }
+                        } else {
+                            cleaned[key] = value;
+                        }
+                    }
+                    return cleaned;
+                },
+
+                countFields(obj) {
+                    if (typeof obj !== 'object' || obj === null) return 1;
+                    
+                    let count = 0;
+                    if (Array.isArray(obj)) {
+                        for (const item of obj) {
+                            count += this.countFields(item);
+                        }
+                    } else {
+                        for (const value of Object.values(obj)) {
+                            count += this.countFields(value);
+                        }
+                    }
+                    return count;
+                },
+
+                extractAllFields(obj, path = []) {
+                    const fields = {};
+                    
+                    if (typeof obj !== 'object' || obj === null) {
+                        return fields;
+                    }
+                    
+                    if (Array.isArray(obj)) {
+                        obj.forEach((item, index) => {
+                            const currentPath = [...path, index.toString()];
+                            if (typeof item === 'object' && item !== null) {
+                                Object.assign(fields, this.extractAllFields(item, currentPath));
+                            } else {
+                                fields[currentPath.join('.')] = item;
+                            }
+                        });
+                    } else {
+                        Object.entries(obj).forEach(([key, value]) => {
+                            const currentPath = [...path, key];
+                            if (typeof value === 'object' && value !== null) {
+                                Object.assign(fields, this.extractAllFields(value, currentPath));
+                            } else {
+                                fields[currentPath.join('.')] = value;
+                            }
+                        });
+                    }
+                    
+                    return fields;
+                },
+
+                processRequestDeduplication(request, allFields, seenValues, fieldHistory, requestId, stats) {
+                    const compressedRequest = JSON.parse(JSON.stringify(request));
+                    const removedFields = {};
+                    
+                    for (const [fieldPath, value] of Object.entries(allFields)) {
+                        const fieldValueKey = \`\${fieldPath}:\${JSON.stringify(value)}\`;
+                        
+                        if (seenValues[fieldValueKey]) {
+                            // 重复字段，移除它
+                            const originalRequestId = fieldHistory[fieldValueKey];
+                            
+                            if (this.removeNestedField(compressedRequest, fieldPath.split('.'))) {
+                                removedFields[fieldPath] = {
+                                    value: value,
+                                    firstSeenIn: originalRequestId,
+                                    reason: 'duplicate_value'
+                                };
+                                stats.removedFields++;
+                            }
+                        } else {
+                            // 新字段值，记录它
+                            seenValues[fieldValueKey] = true;
+                            fieldHistory[fieldValueKey] = requestId;
+                            stats.uniqueFields++;
+                        }
+                    }
+                    
+                    return { compressedRequest, removedFields };
+                },
+
+                removeNestedField(obj, pathArray) {
+                    if (pathArray.length === 0) return false;
+                    
+                    try {
+                        let current = obj;
+                        for (let i = 0; i < pathArray.length - 1; i++) {
+                            const key = pathArray[i];
+                            if (key.match(/^\\d+$/)) {
+                                current = current[parseInt(key)];
+                            } else {
+                                current = current[key];
+                            }
+                            if (current === undefined) return false;
+                        }
+                        
+                        const finalKey = pathArray[pathArray.length - 1];
+                        if (finalKey.match(/^\\d+$/)) {
+                            const index = parseInt(finalKey);
+                            if (Array.isArray(current) && index < current.length) {
+                                current.splice(index, 1);
+                                return true;
+                            }
+                        } else {
+                            if (current && current.hasOwnProperty(finalKey)) {
+                                delete current[finalKey];
+                                return true;
+                            }
+                        }
+                    } catch (e) {
+                        return false;
+                    }
+                    
+                    return false;
+                },
+
+                cleanEmptyStructures(obj) {
+                    if (typeof obj !== 'object' || obj === null) return obj;
+                    
+                    if (Array.isArray(obj)) {
+                        const cleaned = obj.map(item => this.cleanEmptyStructures(item))
+                                          .filter(item => item !== null && item !== undefined);
+                        return cleaned.length > 0 ? cleaned : null;
+                    }
+                    
+                    const cleaned = {};
+                    for (const [key, value] of Object.entries(obj)) {
+                        const cleanedValue = this.cleanEmptyStructures(value);
+                        if (cleanedValue !== null && cleanedValue !== undefined && 
+                            (typeof cleanedValue !== 'object' || 
+                             Object.keys(cleanedValue).length > 0 ||
+                             Array.isArray(cleanedValue))) {
+                            cleaned[key] = cleanedValue;
+                        }
+                    }
+                    
+                    return Object.keys(cleaned).length > 0 ? cleaned : null;
                 }
             };
         }
