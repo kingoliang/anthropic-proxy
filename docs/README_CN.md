@@ -196,14 +196,14 @@ export ANTHROPIC_BASE_URL=http://localhost:3000
 ### 步骤3：启动 Claude Code
 ```bash
 # Claude Code 现在将使用你的代理服务器
-claude-code
+claude
 ```
 
 ### 其他配置方法
 
 **方法1：内联环境变量**
 ```bash
-ANTHROPIC_BASE_URL=http://localhost:8082 claude-code
+ANTHROPIC_BASE_URL=http://localhost:8082 claude
 ```
 
 **方法2：添加到shell配置文件**
@@ -218,7 +218,7 @@ source ~/.bashrc
 #!/bin/bash
 # start-claude-with-proxy.sh
 export ANTHROPIC_BASE_URL=http://localhost:8082
-claude-code
+claude
 ```
 
 ### 验证

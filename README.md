@@ -196,14 +196,14 @@ export ANTHROPIC_BASE_URL=http://localhost:3000
 ### Step 3: Start Claude Code
 ```bash
 # Claude Code will now use your proxy server
-claude-code
+claude
 ```
 
 ### Alternative Configuration Methods
 
 **Option 1: Inline environment variable**
 ```bash
-ANTHROPIC_BASE_URL=http://localhost:8082 claude-code
+ANTHROPIC_BASE_URL=http://localhost:8082 claude
 ```
 
 **Option 2: Add to your shell profile**
@@ -218,7 +218,7 @@ source ~/.bashrc
 #!/bin/bash
 # start-claude-with-proxy.sh
 export ANTHROPIC_BASE_URL=http://localhost:8082
-claude-code
+claude
 ```
 
 ### Verification
