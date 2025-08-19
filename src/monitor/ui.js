@@ -54,6 +54,9 @@ export function getMonitorHTML() {
                 <div class="flex justify-between items-center">
                     <h1 class="text-2xl font-bold text-gray-800">🚀 Anthropic Proxy Monitor</h1>
                     <div class="flex gap-2">
+                        <button @click="showAnalysis()" class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600">
+                            Analyze
+                        </button>
                         <button @click="exportData()" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
                             Export Data
                         </button>
@@ -672,6 +675,16 @@ export function getMonitorHTML() {
                         } catch (error) {
                             console.error('Failed to clear data:', error);
                         }
+                    }
+                },
+
+                async showAnalysis() {
+                    try {
+                        // Open analysis report in a new window/tab
+                        window.open('/api/monitor/analyze', '_blank');
+                    } catch (error) {
+                        console.error('Failed to open analysis:', error);
+                        this.showNotification('Failed to open analysis report', 'error');
                     }
                 },
 

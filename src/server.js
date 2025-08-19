@@ -14,6 +14,7 @@ import { createServer } from 'http';
 import { Readable } from 'stream';
 import { requestStore } from './monitor/store.js';
 import { getMonitorHTML } from './monitor/ui.js';
+import { analyzeRequests, generateAnalysisHTML } from './monitor/analysis.js';
 
 // Load environment variables
 dotenv.config();
@@ -613,6 +614,25 @@ app.post('/api/monitor/clear', (req, res) => {
   } catch (error) {
     logger.error(`Monitor API error: ${error.message}`);
     res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/monitor/analyze', (req, res) => {
+  try {
+    logger.info('Generating analysis report...');
+    const analysisData = analyzeRequests();
+    const htmlReport = generateAnalysisHTML(analysisData);
+    
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(htmlReport);
+    
+    logger.info(`Analysis report generated with ${analysisData.requests.length} requests`);
+  } catch (error) {
+    logger.error(`Analysis generation error: ${error.message}`, error.stack);
+    res.status(500).json({ 
+      error: 'Failed to generate analysis report',
+      message: error.message 
+    });
   }
 });
 
