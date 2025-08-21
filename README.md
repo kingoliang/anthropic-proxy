@@ -4,6 +4,54 @@ A professional proxy server for forwarding requests to the Anthropic API, specif
 
 **[🇨🇳 中文文档](docs/README_CN.md)** | **[📁 GitHub Repository](https://github.com/kingoliang/anthropic-proxy)**
 
+## 🎯 Purpose and Overview
+
+### What is this project?
+This project provides a **local proxy server** that sits between Claude Code and the Anthropic API, acting as an intelligent middleware layer that enhances your development experience with Claude.
+
+### Why do you need it?
+When using Claude Code, you typically send requests directly to Anthropic's servers. While this works perfectly, you miss out on valuable insights about your API usage. This proxy server solves that by providing:
+
+🔍 **Complete Request Visibility**: See every API call made by Claude Code, including full request/response data, token usage, and timing metrics.
+
+📊 **Usage Analytics**: Track your API consumption patterns, model usage, success rates, and performance metrics over time.
+
+🐛 **Debugging Support**: Inspect failed requests, analyze response times, and troubleshoot API integration issues with detailed logging.
+
+💰 **Cost Monitoring**: Monitor token usage and estimate API costs to better manage your Claude Code usage.
+
+📈 **Performance Optimization**: Identify slow requests, optimize your prompts, and improve overall workflow efficiency.
+
+### How does it work?
+```mermaid
+graph LR
+    A[Claude Code] -->|API Requests| B[Anthropic Proxy]
+    B -->|Forwards Requests| C[Anthropic API]
+    C -->|Returns Responses| B
+    B -->|Returns Responses| A
+    B -->|Stores & Analyzes| D[Monitoring Dashboard]
+```
+
+1. **Transparent Proxying**: Claude Code sends requests to your local proxy instead of directly to Anthropic
+2. **Request Interception**: The proxy captures all request/response data for analysis
+3. **API Forwarding**: Requests are forwarded to Anthropic API without modification
+4. **Real-time Monitoring**: All interactions are logged and analyzed in a web dashboard
+5. **Data Export**: Export usage data for further analysis or reporting
+
+### Who should use this?
+- **Claude Code Power Users**: Developers who want to optimize their AI-assisted workflows
+- **API Cost Conscious Users**: Those who need to monitor and control their API spending
+- **Development Teams**: Teams that need visibility into AI tool usage across projects
+- **API Integration Developers**: Developers building applications with Anthropic API
+- **Performance Analysts**: Users who want to analyze and optimize their prompt efficiency
+
+### Key Benefits
+✅ **Zero Code Changes**: Works with existing Claude Code installation - just set one environment variable  
+✅ **Real-time Insights**: Live dashboard with immediate feedback on API usage  
+✅ **Privacy Focused**: All data stays on your local machine  
+✅ **Production Ready**: Includes Docker, PM2, and deployment configurations  
+✅ **Export Capabilities**: Get your data out in standard formats for further analysis
+
 ## 📁 Project Structure
 
 ```
