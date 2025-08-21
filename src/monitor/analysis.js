@@ -110,10 +110,22 @@ function extractUserContent(messages) {
         return content.trim();
       } else if (Array.isArray(content)) {
         // Handle complex content structure
+        // Filter out system-reminder messages and get actual user content
         const textParts = content
           .filter(part => part && part.type === 'text')
-          .map(part => part.text || '');
-        return textParts.join(' ');
+          .map(part => part.text || '')
+          .filter(text => !text.startsWith('<system-reminder>'));
+        
+        // If all parts are system reminders, fall back to all text
+        if (textParts.length === 0) {
+          return content
+            .filter(part => part && part.type === 'text')
+            .map(part => part.text || '')
+            .join(' ');
+        }
+        
+        // Return the first non-system-reminder text as the main user content
+        return textParts[0] ? textParts[0].trim() : textParts.join(' ').trim();
       }
     }
   }
@@ -310,9 +322,19 @@ function getRequestSummary(userContent, assistantResponse, toolsUsed = []) {
 /**
  * Parse and analyze all requests
  */
-export function analyzeRequests() {
-  const exportData = requestStore.export();
-  const allRequests = exportData.requests || [];
+export function analyzeRequests(filters = {}) {
+  // Get filtered requests if filters are provided
+  let allRequests;
+  let exportData;
+  if (Object.keys(filters).length > 0) {
+    const filteredData = requestStore.getAll(filters);
+    allRequests = filteredData.data || [];
+    // Still need export data for stats
+    exportData = requestStore.export();
+  } else {
+    exportData = requestStore.export();
+    allRequests = exportData.requests || [];
+  }
   const requestSummary = [];
   const requestTypes = {};
   let totalUserChars = 0;
@@ -385,30 +407,40 @@ export function analyzeRequests() {
     avgOutputTokens: allRequests.length > 0 ? Math.floor(totalOutputTokens / allRequests.length) : 0
   };
 
-  // Calculate stats - use exported stats if available, otherwise calculate
-  const exportedStats = exportData.stats || {};
+  // Calculate stats - if filters are applied, use calculated stats from filtered data
+  const useFilteredStats = Object.keys(filters).length > 0;
+  const exportedStats = useFilteredStats ? {} : (exportData.stats || {});
+  
   const stats = {
-    totalRequests: exportedStats.totalRequests || allRequests.length,
-    successCount: exportedStats.successCount || successCount,
-    errorCount: exportedStats.errorCount || errorCount,
-    successRate: exportedStats.successRate || (allRequests.length > 0 ? `${Math.round(successCount / allRequests.length * 100)}%` : '0%'),
-    avgDuration: exportedStats.avgDuration || (analytics.avgDurationMs > 0 ? `${analytics.avgDurationMs}ms` : '0ms')
+    totalRequests: useFilteredStats ? allRequests.length : (exportedStats.totalRequests || allRequests.length),
+    successCount: useFilteredStats ? successCount : (exportedStats.successCount || successCount),
+    errorCount: useFilteredStats ? errorCount : (exportedStats.errorCount || errorCount),
+    successRate: allRequests.length > 0 ? `${Math.round(successCount / allRequests.length * 100)}%` : '0%',
+    avgDuration: analytics.avgDurationMs > 0 ? `${analytics.avgDurationMs}ms` : '0ms'
   };
 
   return {
     stats,
     requests: requestSummary,
-    analytics
+    analytics,
+    filters: filters || {}
   };
 }
 
 /**
  * Generate HTML analysis report
  */
-export function generateAnalysisHTML(parsedData) {
-  const { stats, requests, analytics } = parsedData;
+export function generateAnalysisHTML(parsedData, filters = {}) {
+  const { stats, requests, analytics, filters: dataFilters } = parsedData;
+  // Use filters from data if available, otherwise use passed filters
+  const activeFilters = dataFilters && Object.keys(dataFilters).length > 0 ? dataFilters : filters;
   const exportData = requestStore.export();
   const allRequests = exportData.requests || [];
+  
+  // Create filter info for display
+  const filterInfo = Object.keys(activeFilters).length > 0 ? 
+    ` (Filtered: ${Object.entries(activeFilters).map(([k, v]) => `${k}=${v}`).join(', ')})` : 
+    '';
   
   let html = `<!DOCTYPE html>
 <html lang="en">
@@ -680,7 +712,7 @@ export function generateAnalysisHTML(parsedData) {
 </head>
 <body>
     <div class="container">
-        <h1>Anthropic Proxy Analysis Report</h1>
+        <h1>Anthropic Proxy Analysis Report${filterInfo}</h1>
         
         <div class="stats-grid">
             <div class="stat-card">
@@ -836,8 +868,8 @@ export function generateAnalysisHTML(parsedData) {
         </div>
     </div>
     
-    <script type="application/json" id="requestsData">${JSON.stringify(requests, null, 2)}</script>
-    <script type="application/json" id="originalRequestsData">${JSON.stringify(allRequests, null, 2)}</script>
+    <script type="application/json" id="requestsData">${JSON.stringify(requests, null, 2).replace(/</g, '\\u003C').replace(/>/g, '\\u003E')}</script>
+    <script type="application/json" id="originalRequestsData">${JSON.stringify(allRequests, null, 2).replace(/</g, '\\u003C').replace(/>/g, '\\u003E')}</script>
     <script>
         // Global variables
         let requestsData = null;

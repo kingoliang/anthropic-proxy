@@ -99,19 +99,19 @@ export function getMonitorHTML() {
             <!-- Filters -->
             <div class="bg-white rounded-lg shadow p-4 mb-6">
                 <div class="flex gap-4">
-                    <select x-model="filters.status" @change="loadRequests()" class="px-3 py-2 border rounded">
+                    <select x-model="filters.status" @change="applyFilters()" class="px-3 py-2 border rounded">
                         <option value="">All Status</option>
                         <option value="success">Success</option>
                         <option value="error">Error</option>
                         <option value="pending">Pending</option>
                     </select>
-                    <select x-model="filters.model" @change="loadRequests()" class="px-3 py-2 border rounded">
+                    <select x-model="filters.model" @change="applyFilters()" class="px-3 py-2 border rounded">
                         <option value="">All Models</option>
                         <template x-for="model in availableModels" :key="model.value">
                             <option :value="model.value" x-text="model.label"></option>
                         </template>
                     </select>
-                    <select x-model="filters.timeRange" @change="loadRequests()" class="px-3 py-2 border rounded">
+                    <select x-model="filters.timeRange" @change="applyFilters()" class="px-3 py-2 border rounded">
                         <option value="">All Time</option>
                         <option value="1h">Last Hour</option>
                         <option value="24h">Last 24 Hours</option>
@@ -386,6 +386,7 @@ export function getMonitorHTML() {
 
                 async init() {
                     await this.loadConfig();
+                    await this.loadAvailableModels();
                     await this.loadStats();
                     await this.loadRequests();
                     this.startRealTimeUpdates();
@@ -407,7 +408,8 @@ export function getMonitorHTML() {
 
                 async loadStats() {
                     try {
-                        const response = await fetch('/api/monitor/stats');
+                        const params = new URLSearchParams(this.filters);
+                        const response = await fetch('/api/monitor/stats?' + params);
                         this.stats = await response.json();
                     } catch (error) {
                         console.error('Failed to load stats:', error);
@@ -426,19 +428,57 @@ export function getMonitorHTML() {
                     }
                 },
 
-                updateAvailableModels() {
-                    const modelsSet = new Set();
-                    this.requests.forEach(request => {
-                        const model = request.request?.body?.model;
-                        if (model) {
-                            modelsSet.add(model);
+                async applyFilters() {
+                    // Load both stats and requests when filters change
+                    await Promise.all([
+                        this.loadStats(),
+                        this.loadRequests()
+                    ]);
+                },
+
+                async loadAvailableModels() {
+                    try {
+                        // Load all requests without filters to get complete model list
+                        const response = await fetch('/api/monitor/requests');
+                        const data = await response.json();
+                        const allRequests = data.data;
+                        
+                        const modelsSet = new Set();
+                        allRequests.forEach(request => {
+                            const model = request.request?.body?.model;
+                            if (model) {
+                                modelsSet.add(model);
+                            }
+                        });
+                        
+                        this.availableModels = Array.from(modelsSet).map(model => ({
+                            value: model,
+                            label: this.getModelDisplayName(model)
+                        })).sort((a, b) => a.label.localeCompare(b.label));
+                    } catch (error) {
+                        console.error('Failed to load available models:', error);
+                    }
+                },
+
+                checkAndUpdateNewModel(request) {
+                    const model = request.request?.body?.model;
+                    if (model) {
+                        const modelExists = this.availableModels.some(m => m.value === model);
+                        if (!modelExists) {
+                            // Add new model to the list
+                            this.availableModels.push({
+                                value: model,
+                                label: this.getModelDisplayName(model)
+                            });
+                            // Re-sort the list
+                            this.availableModels.sort((a, b) => a.label.localeCompare(b.label));
                         }
-                    });
-                    
-                    this.availableModels = Array.from(modelsSet).map(model => ({
-                        value: model,
-                        label: this.getModelDisplayName(model)
-                    })).sort((a, b) => a.label.localeCompare(b.label));
+                    }
+                },
+
+                updateAvailableModels() {
+                    // This function is kept for compatibility but now only used for checking new models
+                    // The main model list is loaded via loadAvailableModels()
                 },
 
                 getModelDisplayName(model) {
@@ -488,8 +528,8 @@ export function getMonitorHTML() {
                                 if (this.requests.length > 100) {
                                     this.requests.pop();
                                 }
-                                // Update available models when new requests come in
-                                this.updateAvailableModels();
+                                // Check if new model appeared and update model list
+                                this.checkAndUpdateNewModel(data.request);
                             }
                         } else if (data.type === 'stats') {
                             this.stats = data.stats;
@@ -626,24 +666,29 @@ export function getMonitorHTML() {
 
                 async exportData() {
                     try {
-                        const response = await fetch('/api/monitor/export');
+                        const params = new URLSearchParams(this.filters);
+                        const response = await fetch('/api/monitor/export?' + params);
                         const data = await response.json();
                         
                         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = \`proxy-monitor-\${Date.now()}.json\`;
+                        a.download = \`proxy-monitor-filtered-\${Date.now()}.json\`;
                         a.click();
                         URL.revokeObjectURL(url);
+                        
+                        this.showNotification('Data exported successfully!', 'success');
                     } catch (error) {
                         console.error('Failed to export data:', error);
+                        this.showNotification('Failed to export data', 'error');
                     }
                 },
 
                 async exportCompressData() {
                     try {
-                        const response = await fetch('/api/monitor/export');
+                        const params = new URLSearchParams(this.filters);
+                        const response = await fetch('/api/monitor/export?' + params);
                         const data = await response.json();
                         
                         // 使用增量去重算法压缩数据
@@ -654,12 +699,14 @@ export function getMonitorHTML() {
                         const compressedUrl = URL.createObjectURL(compressedBlob);
                         const compressedLink = document.createElement('a');
                         compressedLink.href = compressedUrl;
-                        compressedLink.download = \`proxy-monitor-compressed-\${Date.now()}.json\`;
+                        compressedLink.download = \`proxy-monitor-compressed-filtered-\${Date.now()}.json\`;
                         compressedLink.click();
                         URL.revokeObjectURL(compressedUrl);
                         
+                        this.showNotification('Compressed data exported successfully!', 'success');
                     } catch (error) {
                         console.error('Failed to export compressed data:', error);
+                        this.showNotification('Failed to export compressed data', 'error');
                     }
                 },
 
@@ -680,8 +727,10 @@ export function getMonitorHTML() {
 
                 async showAnalysis() {
                     try {
-                        // Open analysis report in a new window/tab
-                        window.open('/api/monitor/analyze', '_blank');
+                        // Open analysis report in a new window/tab with filters
+                        const params = new URLSearchParams(this.filters);
+                        const url = '/api/monitor/analyze' + (params.toString() ? '?' + params : '');
+                        window.open(url, '_blank');
                     } catch (error) {
                         console.error('Failed to open analysis:', error);
                         this.showNotification('Failed to open analysis report', 'error');

@@ -587,7 +587,62 @@ app.get('/api/monitor/config', (req, res) => {
 
 app.get('/api/monitor/stats', (req, res) => {
   try {
-    const stats = requestStore.getStats();
+    // Get filters from query parameters
+    const filters = {
+      status: req.query.status,
+      model: req.query.model,
+      timeRange: req.query.timeRange
+    };
+    
+    // Remove empty filters
+    Object.keys(filters).forEach(key => {
+      if (!filters[key]) delete filters[key];
+    });
+    
+    let stats;
+    if (Object.keys(filters).length > 0) {
+      // Calculate stats for filtered data
+      const filteredRequests = requestStore.getAll(filters);
+      const requests = filteredRequests.data || [];
+      
+      let successCount = 0;
+      let errorCount = 0;
+      let totalDuration = 0;
+      let totalInputTokens = 0;
+      let totalOutputTokens = 0;
+      
+      requests.forEach(request => {
+        const responseStatus = request.response?.status;
+        if (responseStatus >= 200 && responseStatus < 300 || request.status === 'success') {
+          successCount++;
+        } else if (responseStatus >= 400 || request.status === 'error' || request.error) {
+          errorCount++;
+        }
+        
+        totalDuration += request.metrics?.duration || 0;
+        totalInputTokens += request.metrics?.inputTokens || 0;
+        totalOutputTokens += request.metrics?.outputTokens || 0;
+      });
+      
+      const avgDuration = requests.length > 0 ? Math.round(totalDuration / requests.length) : 0;
+      const successRate = requests.length > 0 ? ((successCount / requests.length) * 100).toFixed(2) : 0;
+      const activeRequests = requests.filter(r => r.status === 'pending').length;
+      
+      stats = {
+        totalRequests: requests.length,
+        successCount: successCount,
+        errorCount: errorCount,
+        successRate: successRate + '%',
+        avgDuration: avgDuration + 'ms',
+        totalInputTokens: totalInputTokens,
+        totalOutputTokens: totalOutputTokens,
+        activeRequests: activeRequests
+      };
+    } else {
+      // Use global stats
+      stats = requestStore.getStats();
+    }
+    
     res.json(stats);
   } catch (error) {
     logger.error(`Monitor API error: ${error.message}`);
@@ -597,10 +652,33 @@ app.get('/api/monitor/stats', (req, res) => {
 
 app.get('/api/monitor/export', (req, res) => {
   try {
-    const data = requestStore.export();
+    // Get filtered data based on query parameters
+    const filters = {
+      status: req.query.status,
+      model: req.query.model,
+      timeRange: req.query.timeRange
+    };
+    
+    // Remove empty filters
+    Object.keys(filters).forEach(key => {
+      if (!filters[key]) delete filters[key];
+    });
+    
+    const filteredRequests = requestStore.getAll(filters);
+    
+    // Export filtered data
+    const exportData = {
+      stats: requestStore.getStats(),
+      requests: filteredRequests.data,
+      total: filteredRequests.total,
+      filters: filters,
+      exportTime: new Date().toISOString()
+    };
+    
+    const filterSuffix = Object.keys(filters).length > 0 ? '-filtered' : '';
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename="proxy-monitor-${Date.now()}.json"`);
-    res.json(data);
+    res.setHeader('Content-Disposition', `attachment; filename="proxy-monitor${filterSuffix}-${Date.now()}.json"`);
+    res.json(exportData);
   } catch (error) {
     logger.error(`Monitor API error: ${error.message}`);
     res.status(500).json({ error: error.message });
@@ -620,13 +698,27 @@ app.post('/api/monitor/clear', (req, res) => {
 app.get('/api/monitor/analyze', (req, res) => {
   try {
     logger.info('Generating analysis report...');
-    const analysisData = analyzeRequests();
-    const htmlReport = generateAnalysisHTML(analysisData);
+    
+    // Get filters from query parameters
+    const filters = {
+      status: req.query.status,
+      model: req.query.model,
+      timeRange: req.query.timeRange
+    };
+    
+    // Remove empty filters
+    Object.keys(filters).forEach(key => {
+      if (!filters[key]) delete filters[key];
+    });
+    
+    const analysisData = analyzeRequests(filters);
+    const htmlReport = generateAnalysisHTML(analysisData, filters);
     
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(htmlReport);
     
-    logger.info(`Analysis report generated with ${analysisData.requests.length} requests`);
+    const filterInfo = Object.keys(filters).length > 0 ? ` with filters: ${JSON.stringify(filters)}` : '';
+    logger.info(`Analysis report generated with ${analysisData.requests.length} requests${filterInfo}`);
   } catch (error) {
     logger.error(`Analysis generation error: ${error.message}`, error.stack);
     res.status(500).json({ 

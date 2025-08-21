@@ -131,10 +131,11 @@ PORT=3000 LOG_LEVEL=DEBUG npx .
 ### Monitoring Endpoints
 - `GET /monitor` - Web monitoring dashboard
 - `GET /api/monitor/requests` - Get request list with filtering
-- `GET /api/monitor/stats` - Get real-time statistics
+- `GET /api/monitor/stats` - Get real-time statistics (supports filter parameters)
 - `GET /api/monitor/stream` - Server-sent events for real-time updates
 - `POST /api/monitor/clear` - Clear all monitoring data
-- `GET /api/monitor/export` - Export monitoring data as JSON
+- `GET /api/monitor/export` - Export monitoring data as JSON (supports filter parameters)
+- `GET /api/monitor/analyze` - Generate analysis report (supports filter parameters)
 
 ## Monitoring Dashboard
 
@@ -142,19 +143,25 @@ Access the built-in monitoring interface at: `http://localhost:8082/monitor`
 
 ### Features:
 - **Real-time request/response tracking**
-- **Performance metrics dashboard**
+- **Performance metrics dashboard** - dynamically updates based on filter conditions
 - **Stream chunk timeline visualization**
 - **API key masking** for security
-- **Advanced filtering** (status, model, time range)
-- **Data export capabilities**
+- **Smart filtering system** (status, model, time range)
+  - Filter conditions apply to all functions (statistics, export, analysis)
+  - Model list always shows all available models, unaffected by filtering
+- **Data export capabilities** - supports exporting filtered data
+- **Compressed export** - uses incremental deduplication algorithm to reduce file size
+- **Analysis reports** - generates detailed analysis based on filter conditions
 - **Auto-refresh with SSE**
 
 ### Dashboard Sections:
-1. **Statistics Panel** - Total requests, success rate, average duration
-2. **Request List** - Filterable table of all API calls
-3. **Detail View** - Complete request/response inspection
-4. **Stream Analysis** - Chunk-by-chunk streaming visualization
-5. **Export Tools** - JSON data export functionality
+1. **Smart Statistics Panel** - Real-time statistics that update based on filter conditions
+2. **Advanced Filters** - Multi-dimensional filtering by status, model, and time range
+3. **Request List** - Filterable table of API calls with real-time updates
+4. **Detail View** - Complete request/response inspection
+5. **Stream Analysis** - Chunk-by-chunk streaming visualization
+6. **Export Tools** - JSON data export with filtering support
+7. **Analysis Reports** - Comprehensive analysis based on filtered data
 
 ## Security Notes
 
