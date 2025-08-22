@@ -639,7 +639,20 @@ export function getMonitorHTML() {
 
                 async copyToClipboard(text, label) {
                     try {
-                        await navigator.clipboard.writeText(text);
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            await navigator.clipboard.writeText(text);
+                        } else {
+                            // Fallback for older browsers or non-HTTPS contexts
+                            const textArea = document.createElement('textarea');
+                            textArea.value = text;
+                            textArea.style.position = 'fixed';
+                            textArea.style.opacity = '0';
+                            document.body.appendChild(textArea);
+                            textArea.focus();
+                            textArea.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(textArea);
+                        }
                         this.showNotification(\`\${label} copied to clipboard!\`, 'success');
                     } catch (error) {
                         console.error('Copy failed:', error);
