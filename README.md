@@ -77,13 +77,24 @@ anthropic-proxy/
 ## ✨ Features
 
 - 🚀 **Node.js-based proxy** for Anthropic API
-- 📊 **Built-in monitoring dashboard** with real-time updates
-- 🔒 **API key masking** for security
-- 📈 **Performance metrics** and token usage tracking
-- 🌊 **Streaming response** support with chunk analysis
-- 💾 **Data export** and management capabilities
-- 🐳 **Docker support** with examples
-- ⚡ **Production ready** with PM2 configuration
+- 🔀 **Dual routing modes**: Direct Anthropic API or OpenRouter with automatic format conversion
+- 🛠 **Advanced configuration UI** at `/config` with real-time updates
+  - Switchable proxy modes (Anthropic/OpenRouter)
+  - Simplified 3-model family mapping (Sonnet/Opus/Haiku)
+  - Dynamic model loading from OpenRouter with 1-hour caching
+  - Searchable model selection with HTML5 datalist filtering
+  - Toast notifications for all user actions
+  - Navigation links between monitor and config pages
+- 🔄 **Live configuration reload** - All changes take effect immediately without restart
+- 🔐 **Secure API key management** via environment variables only
+- 📊 **Comprehensive monitoring dashboard** with real-time SSE updates
+- 🔍 **Enhanced logging** - Detailed logs for both Anthropic and OpenRouter modes
+- 🔒 **API key masking** in logs and UI for security
+- 📈 **Performance metrics** and token usage tracking with filtering
+- 🌊 **Full streaming support** with chunk-by-chunk analysis
+- 💾 **Smart data export** with compressed export and filtering
+- 🐳 **Docker support** with production examples
+- ⚡ **Production ready** with PM2 and systemd configurations
 
 ## 🚀 Quick Start
 
@@ -148,12 +159,29 @@ Create a `.env` file or set environment variables:
 HOST=0.0.0.0
 PORT=8082
 
+# API base URLs
+ANTHROPIC_BASE_URL=https://api.anthropic.com
+
 # Request timeout (milliseconds)
 REQUEST_TIMEOUT=120000
 
 # Log level
 LOG_LEVEL=INFO
+
+# OpenRouter Configuration (required for OpenRouter mode)
+OPENROUTER_API_KEY=your_openrouter_api_key_here
 ```
+
+### Live Configuration Reload
+
+Configuration changes take effect **immediately without restart**:
+
+- **Proxy Mode**: Switch between Anthropic/OpenRouter instantly via web UI
+- **Model Mappings**: Update 3-family mappings (Sonnet/Opus/Haiku), changes apply to new requests
+- **Model Lists**: Dynamic loading from OpenRouter API with 1-hour intelligent caching
+- **API Keys**: Read from environment variables on each request for maximum security
+- **Manual Reload**: Call `POST /api/config/reload` to force configuration and environment refresh
+- **UI Feedback**: Toast notifications confirm all configuration changes
 
 ## Usage Examples
 
@@ -174,33 +202,45 @@ PORT=3000 LOG_LEVEL=DEBUG npx .
 - `POST /v1/messages` - Main messages endpoint (supports streaming)
 - `POST /v1/messages/count_tokens` - Token counting endpoint
 - `GET /health` - Health check
-- `GET /` - API information
+- `GET /` - Redirect to monitoring dashboard
 
 ### Monitoring Endpoints
 - `GET /monitor` - Web monitoring dashboard
 - `GET /api/monitor/requests` - Get request list with filtering
+- `GET /api/monitor/requests/:id` - Get a single request by ID
 - `GET /api/monitor/stats` - Get real-time statistics (supports filter parameters)
 - `GET /api/monitor/stream` - Server-sent events for real-time updates
 - `POST /api/monitor/clear` - Clear all monitoring data
 - `GET /api/monitor/export` - Export monitoring data as JSON (supports filter parameters)
 - `GET /api/monitor/analyze` - Generate analysis report (supports filter parameters)
+- `GET /api/monitor/config` - Get server info (logLevel, port, host)
+
+### Configuration Endpoints
+- `GET /config` - Advanced configuration UI with searchable model selection
+- `GET /api/config` - Get current configuration with live environment integration
+- `POST /api/config` - Update and persist configuration with instant effect
+- `POST /api/config/reset` - Reset configuration to defaults with confirmation
+- `POST /api/config/test-openrouter` - Validate OpenRouter API key from environment
+- `GET /api/config/models` - List available OpenRouter models (1-hour smart cache)
+- `POST /api/config/reload` - Force reload configuration and environment variables
 
 ## Monitoring Dashboard
 
 Access the built-in monitoring interface at: `http://localhost:8082/monitor`
 
 ### Features:
-- **Real-time request/response tracking**
+- **Real-time request/response tracking** for both Anthropic and OpenRouter modes
 - **Performance metrics dashboard** - dynamically updates based on filter conditions
-- **Stream chunk timeline visualization**
-- **API key masking** for security
-- **Smart filtering system** (status, model, time range)
+- **Stream chunk timeline visualization** with detailed timing analysis
+- **Dual-mode logging** - comprehensive logs for both proxy modes with raw response data
+- **API key masking** for security (environment variables only)
+- **Smart filtering system** (status, model, time range, provider)
   - Filter conditions apply to all functions (statistics, export, analysis)
-  - Model list always shows all available models, unaffected by filtering
-- **Data export capabilities** - supports exporting filtered data
-- **Compressed export** - uses incremental deduplication algorithm to reduce file size
-- **Analysis reports** - generates detailed analysis based on filter conditions
-- **Auto-refresh with SSE**
+  - Model list shows all available models from both providers
+- **Advanced data export** - filtered data with compressed export options
+- **Detailed analysis reports** - provider-specific insights and performance metrics
+- **Auto-refresh with SSE** - real-time updates without page reload
+- **Provider transparency** - clear indication of which API backend was used
 
 ### Dashboard Sections:
 1. **Smart Statistics Panel** - Real-time statistics that update based on filter conditions
@@ -213,16 +253,23 @@ Access the built-in monitoring interface at: `http://localhost:8082/monitor`
 
 ## Security Notes
 
-- API keys are automatically masked in logs and monitoring interface
-- Shows first 10 characters + "..." + last 4 characters
-- No authentication required for monitoring (local use)
-- Sensitive headers are filtered in request logging
+- **API Keys**: Stored in environment variables only - never in configuration files
+- **Automatic masking** in logs and monitoring interface (first 10 + "..." + last 4 characters)
+- **No authentication** required for monitoring dashboard (designed for local development use)
+- **Sensitive headers** automatically filtered in request logging
+- **Safe to commit**: `config.json` contains no secrets - only model mappings and settings
+- **Environment isolation**: All sensitive data via `.env` file (excluded from version control)
+- **Local data**: All configuration and monitoring data stays on your machine
+- **API key validation**: Real-time testing ensures keys are valid before use
 
 ## Requirements
 
 - **Node.js 18+**
-- **API Key**: Client must provide API key via headers (`x-api-key` or `authorization`)
-- **Network**: Outbound access to Anthropic API
+- **API Keys**: 
+  - Anthropic API key (for Claude Code) via headers (`x-api-key` or `authorization`)
+  - OpenRouter API key (optional) via `OPENROUTER_API_KEY` environment variable
+- **Network**: Outbound access to Anthropic API and/or OpenRouter API
+- **Browser**: Modern browser with HTML5 datalist support for configuration UI
 
 ## 🎯 Using with Claude Code
 
@@ -280,6 +327,24 @@ claude
 1. **Check proxy is running**: Visit `http://localhost:8082/monitor`
 2. **Test Claude Code**: Make any request in Claude Code
 3. **Monitor requests**: Watch real-time requests in the monitoring dashboard
+
+### OpenRouter Mode Setup
+1. **Set API Key**: Add `OPENROUTER_API_KEY=your_key_here` to `.env` file (required)
+2. **Access Configuration**: Open `http://localhost:8082/config`
+3. **Switch Mode**: Select "OpenRouter" mode in the web interface
+4. **Configure Models**: Set up 3-family model mappings (Sonnet→Model, Opus→Model, Haiku→Model)
+   - Search and select from 99+ available OpenRouter models
+   - Models are fetched dynamically with 1-hour caching
+   - Use searchable dropdowns with built-in filtering
+5. **Save & Test**: Save configuration and test connection (instant feedback via toast)
+6. **Live Updates**: All changes take effect immediately - no restart required
+7. **Monitor Usage**: View detailed logs and metrics in the monitoring dashboard
+
+**How it works:**
+- Requests automatically converted from Anthropic format to OpenAI/OpenRouter format
+- Responses converted back to Anthropic format for full Claude Code compatibility
+- Full streaming support with chunk-by-chunk processing
+- Comprehensive logging shows both original OpenRouter response and converted output
 
 ## Technical Details
 
@@ -347,11 +412,18 @@ sudo systemctl start anthropic-proxy
 
 ### Common Issues:
 
-1. **Port already in use**: Change PORT environment variable
-2. **API key not working**: Verify key format and headers
-3. **Timeout errors**: Increase REQUEST_TIMEOUT value
-4. **Memory usage**: Monitoring data auto-rotates after 1000 requests
-5. **Module not found**: Ensure you're running from the correct directory
+1. **Port already in use**: Change `PORT` environment variable or kill existing processes
+2. **API key not working**: 
+   - Verify Anthropic key format in Claude Code headers
+   - Check OpenRouter key is set in `.env` file as `OPENROUTER_API_KEY`
+   - Use configuration page to test OpenRouter connection
+3. **OpenRouter connection fails**: Verify API key and network access to openrouter.ai
+4. **Model mapping issues**: Use configuration UI to select valid models from dropdown
+5. **Configuration not saving**: Check file permissions and disk space
+6. **Timeout errors**: Increase `REQUEST_TIMEOUT` value for slow models
+7. **Memory usage**: Monitoring data auto-rotates after 1000 requests
+8. **Module not found**: Ensure you're running from the correct directory
+9. **Toast notifications not working**: Clear browser cache and reload configuration page
 
 ### Debug Mode:
 ```bash

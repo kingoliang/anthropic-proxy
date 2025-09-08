@@ -15,24 +15,20 @@ import { Readable } from 'stream';
 import { requestStore } from './monitor/store.js';
 import { getMonitorHTML } from './monitor/ui.js';
 import { analyzeRequests, generateAnalysisHTML } from './monitor/analysis.js';
+import { configManager } from './config/manager.js';
+import { getConfigHTML } from './config/ui.js';
+import { OpenRouterHandler } from './routers/openrouter.js';
 
 // Load environment variables
 dotenv.config();
 
-// Configuration
-const ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
-const HOST = process.env.HOST || '0.0.0.0';
-const PORT = parseInt(process.env.PORT || '8082');
-const REQUEST_TIMEOUT = parseInt(process.env.REQUEST_TIMEOUT || '120000'); // in milliseconds
-const LOG_LEVEL = process.env.LOG_LEVEL || 'INFO';
-
-// Initialize Express app
-const app = express();
-
-// Middleware
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.raw({ type: 'application/octet-stream', limit: '50mb' }));
+// Load configuration
+const config = configManager.getConfig();
+const ANTHROPIC_BASE_URL = config.anthropic.baseUrl;
+const HOST = config.server.host;
+const PORT = config.server.port;
+const REQUEST_TIMEOUT = config.anthropic.timeout;
+const LOG_LEVEL = config.server.logLevel;
 
 // Logging utility
 class Logger {
@@ -65,7 +61,37 @@ class Logger {
   }
 }
 
+// Initialize logger
 const logger = new Logger(LOG_LEVEL);
+
+// Initialize OpenRouter handler (always create it, we'll use it dynamically)
+const openRouterHandler = new OpenRouterHandler(config, logger, requestStore, configManager);
+
+// Initialize Express app
+const app = express();
+
+// Middleware
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.raw({ type: 'application/octet-stream', limit: '50mb' }));
+
+// Update OpenRouter handler with logger
+if (openRouterHandler) {
+  openRouterHandler.logger = logger;
+}
+
+// Listen for configuration changes
+configManager.addListener((newConfig) => {
+  logger.info('Configuration updated, restart required for some changes');
+  if (newConfig.proxyMode === 'openrouter' && !openRouterHandler) {
+    openRouterHandler = new OpenRouterHandler(newConfig, logger, requestStore);
+  } else if (newConfig.proxyMode === 'anthropic') {
+    openRouterHandler = null;
+  } else if (openRouterHandler) {
+    openRouterHandler.config = newConfig;
+    openRouterHandler.converter.config = newConfig.openrouter;
+  }
+});
 
 /**
  * Extract headers to forward from the incoming request
@@ -101,12 +127,25 @@ function getForwardedHeaders(req) {
 }
 
 /**
- * Main messages endpoint - proxies to Anthropic API
+ * Main messages endpoint - proxies to Anthropic API or OpenRouter
  */
 app.post('/v1/messages', async (req, res) => {
   // Start monitoring this request
   const monitorId = requestStore.startRequest(req);
   req.monitorId = monitorId;
+  
+  // Check routing mode
+  const currentConfig = configManager.getConfig();
+  if (currentConfig.proxyMode === 'openrouter' && openRouterHandler) {
+    // Route to OpenRouter
+    if (req.body.stream) {
+      return openRouterHandler.handleStreamingRequest(req, res);
+    } else {
+      return openRouterHandler.handleRequest(req, res);
+    }
+  }
+  
+  // Default: Route to Anthropic
   try {
     // Log incoming request details
     logger.info('='.repeat(60));
@@ -523,23 +562,79 @@ app.get('/health', (req, res) => {
  * Root endpoint with API information
  */
 app.get('/', (req, res) => {
-  res.json({
-    message: 'Anthropic API Proxy',
-    status: 'running',
-    version: '1.0.0',
-    endpoints: {
-      messages: '/v1/messages',
-      count_tokens: '/v1/messages/count_tokens',
-      health: '/health',
-      monitor: '/monitor'
-    },
-    configuration: {
-      target_api: ANTHROPIC_BASE_URL,
-      timeout: REQUEST_TIMEOUT
-    }
-  });
+  res.redirect('/monitor');
 });
 
+
+// Configuration UI
+app.get('/config', (req, res) => {
+  res.send(getConfigHTML());
+});
+
+// Configuration API endpoints
+app.get('/api/config', (req, res) => {
+  res.json(configManager.getConfig());
+});
+
+app.post('/api/config', (req, res) => {
+  try {
+    const updatedConfig = configManager.updateConfig(req.body);
+    res.json(updatedConfig);
+  } catch (error) {
+    logger.error('Error updating config:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/config/reset', (req, res) => {
+  try {
+    const config = configManager.resetToDefaults();
+    res.json(config);
+  } catch (error) {
+    logger.error('Error resetting config:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/config/test-openrouter', async (req, res) => {
+  try {
+    const { apiKey } = req.body;
+    const isValid = await configManager.validateOpenRouterKey(apiKey);
+    res.json({ success: isValid });
+  } catch (error) {
+    logger.error('Error testing OpenRouter connection:', error);
+    res.json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/config/models', async (req, res) => {
+  try {
+    const models = await configManager.getAvailableModels();
+    res.json(models);
+  } catch (error) {
+    logger.error('Error fetching models:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reload configuration endpoint
+app.post('/api/config/reload', (req, res) => {
+  try {
+    const reloadedConfig = configManager.reloadConfig();
+    logger.info('Configuration reloaded successfully');
+    res.json({ 
+      success: true, 
+      message: 'Configuration reloaded successfully',
+      config: reloadedConfig
+    });
+  } catch (error) {
+    logger.error('Error reloading config:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
 
 // Monitor API endpoints
 app.get('/monitor', (req, res) => {

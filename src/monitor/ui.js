@@ -52,7 +52,12 @@ export function getMonitorHTML() {
         <div class="bg-white shadow-sm border-b">
             <div class="container mx-auto px-4 py-4">
                 <div class="flex justify-between items-center">
-                    <h1 class="text-2xl font-bold text-gray-800">🚀 Anthropic Proxy Monitor</h1>
+                    <div class="flex items-center gap-4">
+                        <h1 class="text-2xl font-bold text-gray-800">🚀 Anthropic Proxy Monitor</h1>
+                        <a href="/config" class="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors">
+                            ⚙️ Config
+                        </a>
+                    </div>
                     <div class="flex gap-2">
                         <button @click="showAnalysis()" class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600">
                             Analyze
@@ -286,10 +291,19 @@ export function getMonitorHTML() {
                         <pre class="json-view rounded p-4 scroll-container" x-text="JSON.stringify(selectedRequest?.request?.body, null, 2)"></pre>
                     </div>
 
+                    <!-- Response Debug Info -->
+                    <div class="mb-2 text-xs text-gray-500" x-show="selectedRequest">
+                        Debug: Has response = <span x-text="!!selectedRequest?.response"></span>,
+                        Response status = <span x-text="selectedRequest?.response?.status || 'none'"></span>
+                    </div>
+
                     <!-- Response -->
                     <div class="mb-6" x-show="selectedRequest?.response">
                         <div class="flex justify-between items-center mb-2">
                             <h3 class="text-lg font-semibold">Response</h3>
+                            <div class="text-xs text-gray-500" x-show="selectedRequest?.response?.body?.model">
+                                Model: <span x-text="selectedRequest?.response?.body?.model"></span>
+                            </div>
                             <button @click="copyToClipboard(JSON.stringify(selectedRequest?.response?.body, null, 2), 'Response')" 
                                     class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
