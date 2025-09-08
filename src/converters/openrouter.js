@@ -140,9 +140,7 @@ export class OpenRouterConverter {
     const tools = [];
     if (anthropicRequest.tools && Array.isArray(anthropicRequest.tools)) {
       anthropicRequest.tools.forEach(tool => {
-        // Skip certain tools that might not be compatible
-        if (['BatchTool'].includes(tool.name)) return;
-        
+        // Convert all tools (including BatchTool for multi-task support)
         tools.push({
           type: 'function',
           function: {
@@ -277,16 +275,24 @@ export class OpenRouterConverter {
    * Map OpenRouter finish reason to Anthropic stop reason
    */
   mapStopReason(finishReason) {
+    // Improved mapping with additional OpenRouter finish reasons
     switch (finishReason) {
       case 'stop':
         return 'end_turn';
       case 'length':
         return 'max_tokens';
       case 'tool_calls':
+      case 'function_call': // Some models use this
         return 'tool_use';
       case 'content_filter':
+      case 'safety':
         return 'stop_sequence';
+      case 'error':
+      case 'interrupted':
+        return 'end_turn'; // Handle interruption cases
       default:
+        // Log unknown finish reasons for debugging
+        console.warn(`Unknown OpenRouter finish_reason: ${finishReason}`);
         return 'end_turn';
     }
   }

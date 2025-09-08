@@ -10,7 +10,7 @@
     "modelMapping": {
       "sonnet": "openai/gpt-5",
       "opus": "openai/gpt-5",
-      "haiku": "anthropic/claude-3.5-haiku"
+      "haiku": "google/gemini-2.5-flash"
     }
   },
   "server": {
