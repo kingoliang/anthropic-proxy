@@ -487,6 +487,11 @@ export function getConfigHTML() {
                         <input type="text" id="openrouter-url" placeholder="https://openrouter.ai/api">
                         <div class="help-text">OpenRouter API endpoint</div>
                     </div>
+                    <div class="form-group">
+                        <label>API Key (for testing connection)</label>
+                        <input type="password" id="openrouter-key" placeholder="Enter your OpenRouter API key">
+                        <div class="help-text">Used only for testing connection. Actual key should be set as environment variable.</div>
+                    </div>
                     <div class="alert alert-info">
                         <strong>🔑 API Key Configuration</strong><br>
                         OpenRouter API Key must be configured as an environment variable for security.<br>

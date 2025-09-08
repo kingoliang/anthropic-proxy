@@ -473,7 +473,7 @@ export class OpenRouterHandler {
     }));
 
     const openaiPayload = {
-      model: payload.thinking ? 'openai/gpt-5' : 'openai/gpt-5', // Default model
+      model: this.converter.mapModel(payload.model),
       messages,
       max_tokens: payload.max_tokens,
       temperature: payload.temperature !== undefined ? payload.temperature : 1,

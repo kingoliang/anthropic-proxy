@@ -9,7 +9,7 @@
     "defaultModel": "anthropic/claude-3.5-haiku",
     "modelMapping": {
       "sonnet": "openai/gpt-5",
-      "opus": "openai/gpt-5",
+      "opus": "google/gemini-2.5-flash",
       "haiku": "google/gemini-2.5-flash"
     }
   },

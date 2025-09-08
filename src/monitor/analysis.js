@@ -137,6 +137,12 @@ function extractUserContent(messages) {
  */
 function extractAssistantResponse(streamChunks, mergedContent) {
   // Try merged content first (more reliable)
+  // Check for completeText first (current format)
+  if (mergedContent && mergedContent.completeText) {
+    return mergedContent.completeText;
+  }
+  
+  // Fallback to old content format for compatibility
   if (mergedContent && mergedContent.content) {
     if (typeof mergedContent.content === 'string') {
       return mergedContent.content;
