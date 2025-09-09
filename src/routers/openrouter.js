@@ -63,17 +63,20 @@ export class OpenRouterHandler {
       if (!openaiResponse.ok) {
         const errorDetails = await openaiResponse.text();
         
+        // Sanitize error message to avoid leaking sensitive information
+        const sanitizedError = this.sanitizeError(errorDetails, openaiResponse.status);
+        
         // Update monitor for error
         if (monitorId) {
           this.requestStore.endRequest(monitorId, {
             status: openaiResponse.status,
-            body: { error: errorDetails },
+            body: { error: sanitizedError },
             provider: 'openrouter'
           });
         }
         
         res.writeHead(openaiResponse.status, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: errorDetails }));
+        res.end(JSON.stringify({ error: sanitizedError }));
         return;
       }
       
@@ -130,8 +133,9 @@ export class OpenRouterHandler {
       
       if (!openaiResponse.ok) {
         const errorDetails = await openaiResponse.text();
+        const sanitizedError = this.sanitizeError(errorDetails, openaiResponse.status);
         res.writeHead(openaiResponse.status, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: errorDetails }));
+        res.end(JSON.stringify({ error: sanitizedError }));
         return;
       }
       
@@ -149,6 +153,7 @@ export class OpenRouterHandler {
       
       // Streaming response - match reference implementation pattern
       let isSucceeded = false;
+      let hasActualContent = false;
       const sendSuccessMessage = () => {
         if (isSucceeded) return;
         isSucceeded = true;
@@ -295,8 +300,6 @@ export class OpenRouterHandler {
               }
             }
             
-            sendSuccessMessage();
-            
             // Capture usage if available
             if (parsed.usage) {
               usage = parsed.usage;
@@ -304,17 +307,25 @@ export class OpenRouterHandler {
             
             const delta = parsed.choices[0].delta;
             if (delta && delta.tool_calls) {
+              // Send success message only when we have actual content
+              if (!hasActualContent) {
+                hasActualContent = true;
+                sendSuccessMessage();
+              }
+              
               for (const toolCall of delta.tool_calls) {
                 encounteredToolCall = true;
                 const idx = toolCall.index;
                 if (toolCallAccumulators[idx] === undefined) {
                   toolCallAccumulators[idx] = "";
+                  // Ensure tool call has a valid ID
+                  const toolCallId = toolCall.id || `call_${Date.now()}_${idx}`;
                   this.sendSSE(res, 'content_block_start', {
                     type: 'content_block_start',
                     index: idx,
                     content_block: {
                       type: 'tool_use',
-                      id: toolCall.id,
+                      id: toolCallId,
                       name: toolCall.function.name,
                       input: {}
                     }
@@ -336,6 +347,12 @@ export class OpenRouterHandler {
                 }
               }
             } else if (delta && delta.content) {
+              // Send success message only when we have actual content
+              if (!hasActualContent) {
+                hasActualContent = true;
+                sendSuccessMessage();
+              }
+              
               if (!textBlockStarted) {
                 textBlockStarted = true;
                 this.sendSSE(res, 'content_block_start', {
@@ -357,6 +374,12 @@ export class OpenRouterHandler {
                 }
               });
             } else if (delta && delta.reasoning) {
+              // Send success message only when we have actual content
+              if (!hasActualContent) {
+                hasActualContent = true;
+                sendSuccessMessage();
+              }
+              
               if (!textBlockStarted) {
                 textBlockStarted = true;
                 this.sendSSE(res, 'content_block_start', {
@@ -452,11 +475,17 @@ export class OpenRouterHandler {
         if (Array.isArray(msg.content)) {
           const toolResults = msg.content.filter(item => item.type === 'tool_result');
           toolResults.forEach(toolResult => {
-            messages.push({
-              role: 'tool',
-              content: toolResult.text || toolResult.content,
-              tool_call_id: toolResult.tool_use_id,
-            });
+            // Only process tool results that have a valid tool_use_id
+            if (toolResult.tool_use_id) {
+              messages.push({
+                role: 'tool',
+                content: toolResult.text || toolResult.content,
+                tool_call_id: toolResult.tool_use_id,
+              });
+            } else {
+              // Log warning for debugging - missing tool_use_id means this result can't be matched to a call
+              this.logger.warn('Tool result missing tool_use_id, skipping to avoid ID mismatch');
+            }
           });
         }
       });
@@ -546,19 +575,28 @@ export class OpenRouterHandler {
       ? data.id.replace('chatcmpl', 'msg')
       : 'msg_' + Math.random().toString(36).substr(2, 24);
 
+    const content = [];
+    
+    // Only add text content if it exists and is not null/empty
+    if (openaiMessage.content && openaiMessage.content.trim()) {
+      content.push({
+        text: openaiMessage.content,
+        type: 'text'
+      });
+    }
+    
+    // Add tool calls
+    toolCalls.forEach(toolCall => {
+      content.push({
+        type: 'tool_use',
+        id: toolCall.id,
+        name: toolCall.function.name,
+        input: JSON.parse(toolCall.function.arguments),
+      });
+    });
+
     const anthropicResponse = {
-      content: [
-        {
-          text: openaiMessage.content,
-          type: 'text'
-        },
-        ...toolCalls.map(toolCall => ({
-          type: 'tool_use',
-          id: toolCall.id,
-          name: toolCall.function.name,
-          input: JSON.parse(toolCall.function.arguments),
-        })),
-      ],
+      content,
       id: messageId,
       model: model,
       role: openaiMessage.role,
@@ -595,23 +633,66 @@ export class OpenRouterHandler {
   }
 
   /**
+   * Sanitize error messages to prevent sensitive information leakage
+   */
+  sanitizeError(errorDetails, statusCode) {
+    try {
+      // Try to parse as JSON first
+      const errorObj = JSON.parse(errorDetails);
+      if (errorObj.error && errorObj.error.message) {
+        return this.sanitizeErrorMessage(errorObj.error.message);
+      }
+    } catch (e) {
+      // If not JSON, treat as plain text
+    }
+    
+    return this.sanitizeErrorMessage(errorDetails);
+  }
+
+  /**
+   * Clean error message of sensitive information
+   */
+  sanitizeErrorMessage(message) {
+    if (!message || typeof message !== 'string') {
+      return 'An error occurred while processing your request';
+    }
+
+    // Remove potential API keys, tokens, and sensitive paths
+    let sanitized = message
+      .replace(/sk-[a-zA-Z0-9-_]{20,}/g, 'sk-***')
+      .replace(/Bearer\s+[a-zA-Z0-9-_]{20,}/g, 'Bearer ***')
+      .replace(/\/[a-zA-Z0-9\/\-_\.]+\/[a-zA-Z0-9\/\-_\.]+/g, '/***/')
+      .replace(/api[_-]?key[s]?[:\s=]+[a-zA-Z0-9-_]{10,}/gi, 'api_key: ***')
+      .replace(/token[s]?[:\s=]+[a-zA-Z0-9-_]{10,}/gi, 'token: ***');
+
+    // Limit message length to prevent information leakage
+    if (sanitized.length > 200) {
+      sanitized = sanitized.substring(0, 200) + '...';
+    }
+
+    return sanitized;
+  }
+
+  /**
    * Handle errors (simplified to match reference)
    */
   handleError(error, req, res) {
     this.logger.error('Request error:', error);
     
+    const sanitizedMessage = this.sanitizeErrorMessage(error.message);
+    
     // Update monitor with error
     if (req.monitorId) {
       this.requestStore.endRequest(req.monitorId, {
         status: 500,
-        body: { error: error.message },
+        body: { error: sanitizedMessage },
         provider: 'openrouter'
       });
     }
     
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: error.message }));
+      res.end(JSON.stringify({ error: sanitizedMessage }));
     }
   }
 }

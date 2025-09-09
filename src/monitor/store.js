@@ -7,7 +7,17 @@ import { EventEmitter } from 'events';
 
 // Utility to mask sensitive data
 export function maskSensitiveData(value) {
-  if (!value || typeof value !== 'string') return value;
+  if (!value) return value;
+  
+  // Handle array values (multiple headers with same name)
+  if (Array.isArray(value)) {
+    return value.map(item => maskSensitiveData(item));
+  }
+  
+  // Handle non-string values
+  if (typeof value !== 'string') {
+    return value;
+  }
   
   // Mask API keys - show first 10 chars and last 4 chars
   if (value.length > 20) {
@@ -43,6 +53,36 @@ export class RequestStore extends EventEmitter {
   calculateSize(obj) {
     if (!obj) return 0;
     return new Blob([JSON.stringify(obj)]).size;
+  }
+
+  // Smart eviction strategy - remove oldest completed requests first
+  evictOldestRequests() {
+    const requests = Array.from(this.requests.entries());
+    
+    // Sort by priority: pending requests last (keep them), then by timestamp
+    requests.sort(([, a], [, b]) => {
+      // Keep pending requests
+      if (a.status === 'pending' && b.status !== 'pending') return 1;
+      if (b.status === 'pending' && a.status !== 'pending') return -1;
+      
+      // For non-pending requests, sort by timestamp (oldest first)
+      return new Date(a.timestamp) - new Date(b.timestamp);
+    });
+    
+    // Remove oldest 10% or at least 1 request
+    const removeCount = Math.max(1, Math.floor(this.maxSize * 0.1));
+    for (let i = 0; i < removeCount && requests.length > 0; i++) {
+      const [id] = requests[i];
+      this.requests.delete(id);
+    }
+    
+    // If we still don't have space and all remaining are pending, remove oldest pending
+    if (this.requests.size >= this.maxSize) {
+      const oldestPending = requests.find(([, req]) => req.status === 'pending');
+      if (oldestPending) {
+        this.requests.delete(oldestPending[0]);
+      }
+    }
   }
 
   // Start tracking a request
@@ -89,10 +129,9 @@ export class RequestStore extends EventEmitter {
       error: null
     };
 
-    // Maintain max size limit
+    // Maintain max size limit with smarter eviction
     if (this.requests.size >= this.maxSize) {
-      const firstKey = this.requests.keys().next().value;
-      this.requests.delete(firstKey);
+      this.evictOldestRequests();
     }
 
     this.requests.set(id, requestData);

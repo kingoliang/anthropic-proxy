@@ -65,7 +65,7 @@ class Logger {
 const logger = new Logger(LOG_LEVEL);
 
 // Initialize OpenRouter handler (always create it, we'll use it dynamically)
-const openRouterHandler = new OpenRouterHandler(config, logger, requestStore, configManager);
+let openRouterHandler = new OpenRouterHandler(config, logger, requestStore, configManager);
 
 // Initialize Express app
 const app = express();
@@ -75,21 +75,26 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.raw({ type: 'application/octet-stream', limit: '50mb' }));
 
-// Update OpenRouter handler with logger
-if (openRouterHandler) {
-  openRouterHandler.logger = logger;
-}
+// Update OpenRouter handler with logger (no need to check null, always initialized)
+openRouterHandler.logger = logger;
 
 // Listen for configuration changes
 configManager.addListener((newConfig) => {
   logger.info('Configuration updated, restart required for some changes');
-  if (newConfig.proxyMode === 'openrouter' && !openRouterHandler) {
-    openRouterHandler = new OpenRouterHandler(newConfig, logger, requestStore);
+  if (newConfig.proxyMode === 'openrouter') {
+    // Always ensure we have a handler for OpenRouter mode
+    if (!openRouterHandler) {
+      openRouterHandler = new OpenRouterHandler(newConfig, logger, requestStore, configManager);
+    } else {
+      // Update existing handler configuration
+      openRouterHandler.config = newConfig;
+      openRouterHandler.converter.config = newConfig.openrouter;
+    }
   } else if (newConfig.proxyMode === 'anthropic') {
-    openRouterHandler = null;
-  } else if (openRouterHandler) {
-    openRouterHandler.config = newConfig;
-    openRouterHandler.converter.config = newConfig.openrouter;
+    // Don't set to null, just keep it available but unused
+    if (openRouterHandler) {
+      openRouterHandler.config = newConfig;
+    }
   }
 });
 
@@ -330,13 +335,16 @@ async function handleStreamingResponse(headers, requestData, req, res) {
           }
           
           try {
-            res.write(`${line}\n`);
-            if (line.startsWith('data: ')) {
-              res.write('\n'); // Add extra newline after data lines for SSE format
+            if (!streamDestroyed && !responseEnded) {
+              res.write(`${line}\n`);
+              if (line.startsWith('data: ')) {
+                res.write('\n'); // Add extra newline after data lines for SSE format
+              }
             }
           } catch (writeError) {
             logger.error(`Error writing to response: ${writeError.message}`);
             streamDestroyed = true;
+            responseEnded = true;
           }
         }
       });
@@ -346,11 +354,12 @@ async function handleStreamingResponse(headers, requestData, req, res) {
       if (responseEnded) return;
       
       // Process any remaining data in buffer
-      if (buffer.trim() && !streamDestroyed) {
+      if (buffer.trim() && !streamDestroyed && !responseEnded) {
         try {
           res.write(`${buffer}\n\n`);
         } catch (writeError) {
           logger.error(`Error writing final buffer: ${writeError.message}`);
+          streamDestroyed = true;
         }
       }
       
@@ -368,7 +377,7 @@ async function handleStreamingResponse(headers, requestData, req, res) {
         const toolCalls = [];
         let messageComplete = false;
         
-        collectedResponse.forEach(chunkStr => {
+        collectedResponse.forEach((chunkStr, index) => {
           try {
             const chunk = JSON.parse(chunkStr);
             
@@ -393,8 +402,19 @@ async function handleStreamingResponse(headers, requestData, req, res) {
             } else if (chunk.type === 'message_stop') {
               messageComplete = true;
             }
-          } catch (e) {
-            // Ignore parse errors
+          } catch (parseError) {
+            // Log JSON parse errors for debugging instead of silently ignoring
+            logger.warn(`Failed to parse JSON chunk at index ${index}: ${parseError.message}`);
+            logger.debug(`Invalid chunk content: ${chunkStr.substring(0, 200)}${chunkStr.length > 200 ? '...' : ''}`);
+            
+            // Optionally, we could collect malformed chunks for analysis
+            if (req.monitorId) {
+              requestStore.addStreamChunk(req.monitorId, {
+                error: 'JSON_PARSE_ERROR',
+                content: chunkStr,
+                message: parseError.message
+              });
+            }
           }
         });
         
@@ -446,7 +466,7 @@ async function handleStreamingResponse(headers, requestData, req, res) {
       if (responseEnded) return;
       
       logger.error(`Stream error: ${error.message}`);
-      if (!streamDestroyed) {
+      if (!streamDestroyed && !responseEnded) {
         try {
           res.write(`data: ${JSON.stringify({
             type: 'error',
@@ -454,6 +474,7 @@ async function handleStreamingResponse(headers, requestData, req, res) {
           })}\n\n`);
         } catch (writeError) {
           logger.error(`Error writing error message: ${writeError.message}`);
+          streamDestroyed = true;
         }
       }
       
@@ -488,13 +509,16 @@ async function handleStreamingResponse(headers, requestData, req, res) {
         res.writeHead(500, { 'Content-Type': 'text/event-stream' });
       }
       
-      try {
-        res.write(`data: ${JSON.stringify({
-          type: 'error',
-          error: { type: 'stream_error', message: error.message }
-        })}\n\n`);
-      } catch (writeError) {
-        logger.error(`Error writing error response: ${writeError.message}`);
+      if (!streamDestroyed && !responseEnded) {
+        try {
+          res.write(`data: ${JSON.stringify({
+            type: 'error',
+            error: { type: 'stream_error', message: error.message }
+          })}\n\n`);
+        } catch (writeError) {
+          logger.error(`Error writing error response: ${writeError.message}`);
+          streamDestroyed = true;
+        }
       }
       
       res.end();
@@ -935,7 +959,9 @@ function main() {
     });
     
     // Also close any active connections
-    server.closeAllConnections?.();
+    if (server.closeAllConnections) {
+      server.closeAllConnections();
+    }
   };
   
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

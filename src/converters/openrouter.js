@@ -112,11 +112,17 @@ export class OpenRouterConverter {
           // Extract tool results
           const toolResults = msg.content.filter(item => item.type === 'tool_result');
           toolResults.forEach(toolResult => {
-            messages.push({
-              role: 'tool',
-              content: toolResult.content || toolResult.text || JSON.stringify(toolResult),
-              tool_call_id: toolResult.tool_use_id
-            });
+            // Only process tool results that have a valid tool_use_id
+            if (toolResult.tool_use_id) {
+              messages.push({
+                role: 'tool',
+                content: toolResult.content || toolResult.text || JSON.stringify(toolResult),
+                tool_call_id: toolResult.tool_use_id
+              });
+            } else {
+              // Log warning for debugging - missing tool_use_id means this result can't be matched to a call
+              console.warn('Tool result missing tool_use_id, skipping to avoid ID mismatch');
+            }
           });
         }
         
@@ -140,15 +146,17 @@ export class OpenRouterConverter {
     const tools = [];
     if (anthropicRequest.tools && Array.isArray(anthropicRequest.tools)) {
       anthropicRequest.tools.forEach(tool => {
-        // Convert all tools (including BatchTool for multi-task support)
-        tools.push({
-          type: 'function',
-          function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: this.cleanJsonSchema(tool.input_schema)
-          }
-        });
+        // Filter out BatchTool and other Claude-specific tools that OpenRouter doesn't support
+        if (!['BatchTool'].includes(tool.name)) {
+          tools.push({
+            type: 'function',
+            function: {
+              name: tool.name,
+              description: tool.description,
+              parameters: this.cleanJsonSchema(tool.input_schema)
+            }
+          });
+        }
       });
     }
     
@@ -380,9 +388,10 @@ export class OpenRouterConverter {
       headers['Authorization'] = `Bearer ${anthropicHeaders['x-api-key']}`;
     }
     
-    // Add HTTP referer for OpenRouter
-    headers['HTTP-Referer'] = 'https://github.com/your-repo/cc-proxy';
-    headers['X-Title'] = 'CC Proxy';
+    // Add HTTP referer for OpenRouter (from configManager if available)
+    const config = this.configManager ? this.configManager.getConfig() : {};
+    headers['HTTP-Referer'] = config.headers?.httpReferer || 'https://github.com/kingoliang/anthropic-proxy';
+    headers['X-Title'] = config.headers?.title || 'Anthropic Proxy';
     
     return headers;
   }

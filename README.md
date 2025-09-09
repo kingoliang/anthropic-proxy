@@ -1,6 +1,6 @@
 # Anthropic API Proxy
 
-A professional proxy server for forwarding requests to the Anthropic API, specifically designed for Claude Code with comprehensive monitoring capabilities.
+An intelligent proxy server designed for Claude Code with **dual routing modes**: direct pass-through to Anthropic API or smart conversion to OpenRouter API, featuring comprehensive monitoring and analytics.
 
 **[🇨🇳 中文文档](docs/README_CN.md)** | **[📁 GitHub Repository](https://github.com/kingoliang/anthropic-proxy)**
 
@@ -95,6 +95,78 @@ anthropic-proxy/
 - 💾 **Smart data export** with compressed export and filtering
 - 🐳 **Docker support** with production examples
 - ⚡ **Production ready** with PM2 and systemd configurations
+
+## 🔀 Two Core Functionality Modes
+
+### Function 1: Direct Anthropic API Pass-through (Default Mode)
+**Purpose**: Acts as a transparent proxy, forwarding Claude Code requests directly to Anthropic API while providing complete monitoring
+
+**How to Use**:
+1. Start the proxy server:
+   ```bash
+   npx github:kingoliang/anthropic-proxy
+   ```
+2. Configure Claude Code to use the proxy:
+   ```bash
+   export ANTHROPIC_BASE_URL=http://localhost:8082
+   ```
+3. Continue using Claude Code normally - Anthropic API key is passed through headers (x-api-key or authorization)
+4. Monitor all requests in real-time at `http://localhost:8082/monitor`
+
+**One-liner Example**:
+```bash
+ANTHROPIC_BASE_URL=http://localhost:8082 claude
+```
+
+**Benefits**:
+- ✅ Zero code changes, fully compatible with existing Claude Code setup
+- ✅ Maintains native Anthropic API experience
+- ✅ Complete request/response monitoring and analysis
+- ✅ Supports all Anthropic models and features
+
+### Function 2: Convert Anthropic API Format to OpenRouter API
+**Purpose**: Intelligently converts Claude Code's Anthropic API requests to OpenRouter format, enabling use of cheaper third-party models
+
+**How to Use**:
+1. Set your OpenRouter API key:
+   ```bash
+   export OPENROUTER_API_KEY=sk-or-v1-your_key_here
+   ```
+2. Start the proxy server:
+   ```bash
+   npx github:kingoliang/anthropic-proxy
+   ```
+3. Open the configuration interface to switch modes:
+   ```bash
+   open http://localhost:8082/config
+   ```
+4. Select "OpenRouter" mode in the web interface
+5. Configure model mappings (optional):
+   - Sonnet → Choose an OpenRouter model
+   - Opus → Choose an OpenRouter model
+   - Haiku → Choose an OpenRouter model
+6. Save configuration and continue using Claude Code normally
+
+**Complete Example**:
+```bash
+# 1. Set environment variables
+export OPENROUTER_API_KEY=sk-or-v1-your_key_here
+export ANTHROPIC_BASE_URL=http://localhost:8082
+
+# 2. Start the proxy
+npx github:kingoliang/anthropic-proxy
+
+# 3. Visit http://localhost:8082/config in browser and switch to OpenRouter mode
+
+# 4. Use Claude Code (will automatically use OpenRouter models)
+claude
+```
+
+**Benefits**:
+- 💰 **Cost Savings**: Use OpenRouter's cheaper third-party models
+- 🔄 **Automatic Conversion**: Request/response formats automatically converted, Claude Code is unaware
+- 🌐 **More Choices**: 99+ models available, including various open source and commercial models
+- 📊 **Full Monitoring**: Transparent conversion process, view original requests and converted OpenRouter requests
 
 ## 🚀 Quick Start
 

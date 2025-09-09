@@ -1,6 +1,6 @@
 # Anthropic API 代理服务器
 
-专为 Claude Code 设计的专业 Anthropic API 代理服务器，具备全面的监控与可配置的路由能力。
+专为 Claude Code 设计的智能代理服务器，支持**双模式路由**：直接透传到 Anthropic API 或智能转换到 OpenRouter API，同时提供全面的监控与分析功能。
 
 **[🇺🇸 English Documentation](../README.md)** | **[📁 GitHub 仓库](https://github.com/kingoliang/anthropic-proxy)**
 
@@ -84,6 +84,78 @@ anthropic-proxy/
 ├── .gitignore
 └── LICENSE
 ```
+
+## 🔀 两种核心功能模式
+
+### 功能一：直连 Anthropic API（默认模式）
+**作用**：作为透明代理，原样转发 Claude Code 请求到 Anthropic API，提供完整监控
+
+**使用方法**：
+1. 启动代理服务器：
+   ```bash
+   npx github:kingoliang/anthropic-proxy
+   ```
+2. 配置 Claude Code 使用代理：
+   ```bash
+   export ANTHROPIC_BASE_URL=http://localhost:8082
+   ```
+3. 继续使用 Claude Code，Anthropic API 密钥通过请求头传递（x-api-key 或 authorization）
+4. 在 `http://localhost:8082/monitor` 实时监控所有请求
+
+**一键启动示例**：
+```bash
+ANTHROPIC_BASE_URL=http://localhost:8082 claude
+```
+
+**优势**：
+- ✅ 零代码更改，完全兼容现有 Claude Code 设置
+- ✅ 保持原生 Anthropic API 体验
+- ✅ 完整请求/响应监控与分析
+- ✅ 支持所有 Anthropic 模型和功能
+
+### 功能二：转换 Anthropic API 格式到 OpenRouter API
+**作用**：将 Claude Code 发出的 Anthropic API 请求智能转换为 OpenRouter 格式，让您使用更便宜的第三方模型
+
+**使用方法**：
+1. 设置 OpenRouter API 密钥：
+   ```bash
+   export OPENROUTER_API_KEY=sk-or-v1-your_key_here
+   ```
+2. 启动代理服务器：
+   ```bash
+   npx github:kingoliang/anthropic-proxy
+   ```
+3. 打开配置界面切换模式：
+   ```bash
+   open http://localhost:8082/config
+   ```
+4. 在 Web 界面选择「OpenRouter」模式
+5. 配置模型映射（可选）：
+   - Sonnet → 选择一个 OpenRouter 模型
+   - Opus → 选择一个 OpenRouter 模型  
+   - Haiku → 选择一个 OpenRouter 模型
+6. 保存配置，继续正常使用 Claude Code
+
+**完整示例**：
+```bash
+# 1. 设置环境变量
+export OPENROUTER_API_KEY=sk-or-v1-your_key_here
+export ANTHROPIC_BASE_URL=http://localhost:8082
+
+# 2. 启动代理
+npx github:kingoliang/anthropic-proxy
+
+# 3. 在浏览器中访问 http://localhost:8082/config 切换到 OpenRouter 模式
+
+# 4. 使用 Claude Code（会自动使用 OpenRouter 的模型）
+claude
+```
+
+**优势**：
+- 💰 **成本节约**：使用 OpenRouter 更便宜的第三方模型
+- 🔄 **自动转换**：请求/响应格式自动转换，Claude Code 无感知
+- 🌐 **更多选择**：99+ 模型可选，包括各种开源和商业模型
+- 📊 **完整监控**：转换过程透明，可查看原始请求和转换后的 OpenRouter 请求
 
 ## 🚀 快速开始
 

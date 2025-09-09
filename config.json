@@ -8,8 +8,8 @@
     "baseUrl": "https://openrouter.ai/api",
     "defaultModel": "anthropic/claude-3.5-haiku",
     "modelMapping": {
-      "sonnet": "openai/gpt-5",
-      "opus": "google/gemini-2.5-flash",
+      "sonnet": "z-ai/glm-4.5",
+      "opus": "google/gemini-2.5-pro",
       "haiku": "google/gemini-2.5-flash"
     }
   },

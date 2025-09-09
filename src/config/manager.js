@@ -62,6 +62,10 @@ export class ConfigManager {
         enabled: true,
         maxRequests: 1000,
         retentionHours: 24
+      },
+      headers: {
+        httpReferer: process.env.HTTP_REFERER || 'https://github.com/kingoliang/anthropic-proxy',
+        title: process.env.X_TITLE || 'Anthropic Proxy'
       }
     };
   }
@@ -113,9 +117,68 @@ export class ConfigManager {
   }
 
   /**
+   * Validate configuration structure
+   */
+  validateConfig(config) {
+    if (!config || typeof config !== 'object') {
+      throw new Error('Configuration must be an object');
+    }
+    
+    // Validate proxy mode
+    if (config.proxyMode && !['anthropic', 'openrouter'].includes(config.proxyMode)) {
+      throw new Error('proxyMode must be either "anthropic" or "openrouter"');
+    }
+    
+    // Validate server config
+    if (config.server) {
+      if (config.server.port && (typeof config.server.port !== 'number' || config.server.port < 1 || config.server.port > 65535)) {
+        throw new Error('server.port must be a number between 1 and 65535');
+      }
+      if (config.server.logLevel && !['DEBUG', 'INFO', 'WARN', 'ERROR'].includes(config.server.logLevel)) {
+        throw new Error('server.logLevel must be one of: DEBUG, INFO, WARN, ERROR');
+      }
+    }
+    
+    // Validate anthropic config
+    if (config.anthropic) {
+      if (config.anthropic.baseUrl && typeof config.anthropic.baseUrl !== 'string') {
+        throw new Error('anthropic.baseUrl must be a string');
+      }
+      if (config.anthropic.timeout && (typeof config.anthropic.timeout !== 'number' || config.anthropic.timeout < 1000)) {
+        throw new Error('anthropic.timeout must be a number >= 1000');
+      }
+    }
+    
+    // Validate openrouter config
+    if (config.openrouter) {
+      if (config.openrouter.baseUrl && typeof config.openrouter.baseUrl !== 'string') {
+        throw new Error('openrouter.baseUrl must be a string');
+      }
+      if (config.openrouter.modelMapping && typeof config.openrouter.modelMapping !== 'object') {
+        throw new Error('openrouter.modelMapping must be an object');
+      }
+    }
+    
+    // Validate monitoring config
+    if (config.monitoring) {
+      if (config.monitoring.maxRequests && (typeof config.monitoring.maxRequests !== 'number' || config.monitoring.maxRequests < 1)) {
+        throw new Error('monitoring.maxRequests must be a positive number');
+      }
+      if (config.monitoring.retentionHours && (typeof config.monitoring.retentionHours !== 'number' || config.monitoring.retentionHours < 1)) {
+        throw new Error('monitoring.retentionHours must be a positive number');
+      }
+    }
+    
+    return true;
+  }
+
+  /**
    * Update configuration
    */
   updateConfig(updates) {
+    // Validate input before merging
+    this.validateConfig(updates);
+    
     this.config = this.mergeDeep(this.config, updates);
     this.saveConfig();
     return this.config;
@@ -200,8 +263,8 @@ export class ConfigManager {
       const response = await fetch('https://openrouter.ai/api/v1/models', {
         headers: {
           'Authorization': `Bearer ${apiKey}`,
-          'HTTP-Referer': 'https://github.com/your-repo/cc-proxy',
-          'X-Title': 'CC Proxy'
+          'HTTP-Referer': this.config.headers?.httpReferer || 'https://github.com/kingoliang/anthropic-proxy',
+          'X-Title': this.config.headers?.title || 'Anthropic Proxy'
         }
       });
       return response.ok;
@@ -230,8 +293,8 @@ export class ConfigManager {
       const response = await fetch('https://openrouter.ai/api/v1/models', {
         headers: {
           'Authorization': `Bearer ${apiKey}`,
-          'HTTP-Referer': 'https://github.com/your-repo/cc-proxy',
-          'X-Title': 'CC Proxy'
+          'HTTP-Referer': this.config.headers?.httpReferer || 'https://github.com/kingoliang/anthropic-proxy',
+          'X-Title': this.config.headers?.title || 'Anthropic Proxy'
         }
       });
       
