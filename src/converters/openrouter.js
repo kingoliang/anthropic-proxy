@@ -4,7 +4,7 @@
  */
 
 export class OpenRouterConverter {
-  constructor(config = {}, configManager = null) {
+  constructor(config = {}, configManager = null, logger = null) {
     this.config = {
       baseUrl: config.baseUrl || 'https://openrouter.ai/api',
       defaultModel: config.defaultModel || 'anthropic/claude-3.5-sonnet',
@@ -15,6 +15,7 @@ export class OpenRouterConverter {
       }
     };
     this.configManager = configManager;
+    this.logger = logger;
   }
 
   /**
@@ -109,20 +110,14 @@ export class OpenRouterConverter {
             });
           });
           
-          // Extract tool results
+          // Extract tool results - EXACTLY like reference
           const toolResults = msg.content.filter(item => item.type === 'tool_result');
           toolResults.forEach(toolResult => {
-            // Only process tool results that have a valid tool_use_id
-            if (toolResult.tool_use_id) {
-              messages.push({
-                role: 'tool',
-                content: toolResult.content || toolResult.text || JSON.stringify(toolResult),
-                tool_call_id: toolResult.tool_use_id
-              });
-            } else {
-              // Log warning for debugging - missing tool_use_id means this result can't be matched to a call
-              console.warn('Tool result missing tool_use_id, skipping to avoid ID mismatch');
-            }
+            messages.push({
+              role: 'tool',
+              content: toolResult.text || toolResult.content,
+              tool_call_id: toolResult.tool_use_id
+            });
           });
         }
         
@@ -142,11 +137,11 @@ export class OpenRouterConverter {
       });
     }
     
-    // Convert tools
+    // Convert tools - filter out BatchTool exactly like reference
     const tools = [];
     if (anthropicRequest.tools && Array.isArray(anthropicRequest.tools)) {
       anthropicRequest.tools.forEach(tool => {
-        // Filter out BatchTool and other Claude-specific tools that OpenRouter doesn't support
+        // Filter out BatchTool exactly like reference implementation
         if (!['BatchTool'].includes(tool.name)) {
           tools.push({
             type: 'function',
@@ -232,8 +227,8 @@ export class OpenRouterConverter {
     const choice = openRouterResponse.choices[0];
     const message = choice.message;
     
-    // Map finish reason
-    const stopReason = this.mapStopReason(choice.finish_reason);
+    // Map finish reason with original response for detailed logging
+    const stopReason = this.mapStopReason(choice.finish_reason, openRouterResponse);
     
     // Build content array
     const content = [];
@@ -282,27 +277,44 @@ export class OpenRouterConverter {
   /**
    * Map OpenRouter finish reason to Anthropic stop reason
    */
-  mapStopReason(finishReason) {
-    // Improved mapping with additional OpenRouter finish reasons
+  mapStopReason(finishReason, originalResponse = null) {
+    // Match reference implementation exactly
+    let mappedReason;
+    let mappingSource;
+    
     switch (finishReason) {
-      case 'stop':
-        return 'end_turn';
-      case 'length':
-        return 'max_tokens';
-      case 'tool_calls':
-      case 'function_call': // Some models use this
-        return 'tool_use';
-      case 'content_filter':
-      case 'safety':
-        return 'stop_sequence';
-      case 'error':
-      case 'interrupted':
-        return 'end_turn'; // Handle interruption cases
-      default:
-        // Log unknown finish reasons for debugging
-        console.warn(`Unknown OpenRouter finish_reason: ${finishReason}`);
-        return 'end_turn';
+      case 'tool_calls': 
+        mappedReason = 'tool_use';
+        mappingSource = 'standard mapping: tool_calls → tool_use';
+        break;
+      case 'stop': 
+        mappedReason = 'end_turn';
+        mappingSource = 'standard mapping: stop → end_turn (normal completion)';
+        break;
+      case 'length': 
+        mappedReason = 'max_tokens';
+        mappingSource = 'standard mapping: length → max_tokens';
+        break;
+      default: 
+        mappedReason = 'end_turn';
+        mappingSource = `fallback mapping: unknown finish_reason '${finishReason}' → end_turn`;
+        console.warn(`Unknown OpenRouter finish_reason: ${finishReason}, defaulting to end_turn`);
+        break;
     }
+    
+    // Log detailed information when mapping to end_turn
+    if (mappedReason === 'end_turn') {
+      const logMethod = this.logger?.info || console.info;
+      logMethod.call(this.logger || console, '🔍 STOP_REASON MAPPING TO END_TURN (Converter):');
+      logMethod.call(this.logger || console, `   Original finish_reason: "${finishReason}"`);
+      logMethod.call(this.logger || console, `   Mapping decision: ${mappingSource}`);
+      if (originalResponse) {
+        logMethod.call(this.logger || console, '   Original OpenRouter response:');
+        logMethod.call(this.logger || console, '   ' + JSON.stringify(originalResponse, null, 2).replace(/\n/g, '\n   '));
+      }
+    }
+    
+    return mappedReason;
   }
 
   /**
@@ -356,7 +368,7 @@ export class OpenRouterConverter {
       events.push({
         type: 'message_delta',
         delta: {
-          stop_reason: this.mapStopReason(chunk.choices[0].finish_reason),
+          stop_reason: this.mapStopReason(chunk.choices[0].finish_reason, chunk),
           stop_sequence: null
         },
         usage: chunk.usage ? {
@@ -395,4 +407,5 @@ export class OpenRouterConverter {
     
     return headers;
   }
+
 }

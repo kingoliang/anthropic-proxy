@@ -12,7 +12,7 @@ export class OpenRouterHandler {
     this.logger = logger;
     this.requestStore = requestStore;
     this.configManager = configManager;
-    this.converter = new OpenRouterConverter(config.openrouter, configManager);
+    this.converter = new OpenRouterConverter(config.openrouter, configManager, logger);
   }
 
   /**
@@ -36,6 +36,8 @@ export class OpenRouterHandler {
       default: return 'end_turn';
     }
   }
+
+
 
   /**
    * Handle non-streaming request (simplified to match reference)
@@ -151,9 +153,8 @@ export class OpenRouterHandler {
         return;
       }
       
-      // Streaming response - match reference implementation pattern
+      // Streaming response - match reference implementation pattern exactly
       let isSucceeded = false;
-      let hasActualContent = false;
       const sendSuccessMessage = () => {
         if (isSucceeded) return;
         isSucceeded = true;
@@ -225,6 +226,7 @@ export class OpenRouterHandler {
                 });
               }
               
+              // Use EXACT same logic as reference implementation
               const stopReason = encounteredToolCall ? 'tool_use' : 'end_turn';
               
               this.sendSSE(res, 'message_delta', {
@@ -262,7 +264,7 @@ export class OpenRouterHandler {
                           input: input
                         };
                       }) :
-                      [{ type: 'text', text: accumulatedContent }],
+                      [{ type: 'text', text: accumulatedContent + accumulatedReasoning }],
                     model: openRouterRequest.model,
                     stop_reason: stopReason,
                     stop_sequence: null,
@@ -288,6 +290,7 @@ export class OpenRouterHandler {
               if (!isSucceeded) {
                 throw new Error(parsed.error.message);
               } else {
+                // Already started streaming, send error in SSE format
                 this.sendSSE(res, 'error', {
                   type: 'error',
                   error: {
@@ -300,32 +303,31 @@ export class OpenRouterHandler {
               }
             }
             
+            // Send success message immediately like reference implementation
+            sendSuccessMessage();
+            
             // Capture usage if available
             if (parsed.usage) {
               usage = parsed.usage;
             }
             
             const delta = parsed.choices[0].delta;
+            
+            // Follow reference implementation: ignore finish_reason in streaming chunks
+            // Only use tool-call detection logic, process finish_reason at [DONE] marker
+            
             if (delta && delta.tool_calls) {
-              // Send success message only when we have actual content
-              if (!hasActualContent) {
-                hasActualContent = true;
-                sendSuccessMessage();
-              }
-              
               for (const toolCall of delta.tool_calls) {
                 encounteredToolCall = true;
                 const idx = toolCall.index;
                 if (toolCallAccumulators[idx] === undefined) {
                   toolCallAccumulators[idx] = "";
-                  // Ensure tool call has a valid ID
-                  const toolCallId = toolCall.id || `call_${Date.now()}_${idx}`;
                   this.sendSSE(res, 'content_block_start', {
                     type: 'content_block_start',
                     index: idx,
                     content_block: {
                       type: 'tool_use',
-                      id: toolCallId,
+                      id: toolCall.id,
                       name: toolCall.function.name,
                       input: {}
                     }
@@ -347,12 +349,6 @@ export class OpenRouterHandler {
                 }
               }
             } else if (delta && delta.content) {
-              // Send success message only when we have actual content
-              if (!hasActualContent) {
-                hasActualContent = true;
-                sendSuccessMessage();
-              }
-              
               if (!textBlockStarted) {
                 textBlockStarted = true;
                 this.sendSSE(res, 'content_block_start', {
@@ -374,12 +370,6 @@ export class OpenRouterHandler {
                 }
               });
             } else if (delta && delta.reasoning) {
-              // Send success message only when we have actual content
-              if (!hasActualContent) {
-                hasActualContent = true;
-                sendSuccessMessage();
-              }
-              
               if (!textBlockStarted) {
                 textBlockStarted = true;
                 this.sendSSE(res, 'content_block_start', {
@@ -475,31 +465,27 @@ export class OpenRouterHandler {
         if (Array.isArray(msg.content)) {
           const toolResults = msg.content.filter(item => item.type === 'tool_result');
           toolResults.forEach(toolResult => {
-            // Only process tool results that have a valid tool_use_id
-            if (toolResult.tool_use_id) {
-              messages.push({
-                role: 'tool',
-                content: toolResult.text || toolResult.content,
-                tool_call_id: toolResult.tool_use_id,
-              });
-            } else {
-              // Log warning for debugging - missing tool_use_id means this result can't be matched to a call
-              this.logger.warn('Tool result missing tool_use_id, skipping to avoid ID mismatch');
-            }
+            messages.push({
+              role: 'tool',
+              content: toolResult.text || toolResult.content,
+              tool_call_id: toolResult.tool_use_id,
+            });
           });
         }
       });
     }
 
-    // Convert tools
-    const tools = (payload.tools || []).filter(tool => !['BatchTool'].includes(tool.name)).map(tool => ({
-      type: 'function',
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: this.removeUriFormat(tool.input_schema),
-      },
-    }));
+    // Convert tools - filter out BatchTool (matching reference implementation)
+    const tools = (payload.tools || [])
+      .filter(tool => !['BatchTool'].includes(tool.name))
+      .map(tool => ({
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: this.removeUriFormat(tool.input_schema),
+        },
+      }));
 
     const openaiPayload = {
       model: this.converter.mapModel(payload.model),
@@ -510,6 +496,30 @@ export class OpenRouterHandler {
     };
     if (tools.length > 0) openaiPayload.tools = tools;
     return openaiPayload;
+  }
+
+  /**
+   * Check if model supports BatchTool for multi-step operations
+   */
+  modelSupportsBatchTool(modelName) {
+    // Models known to support complex tool orchestration
+    const batchToolSupportedModels = [
+      'openai/gpt-4', 
+      'openai/gpt-4-turbo',
+      'openai/gpt-5',
+      'anthropic/claude-3.5-sonnet',
+      'anthropic/claude-3-opus',
+      'deepseek/deepseek-chat',
+      // Current config mapped models
+      'z-ai/glm-4.5',           // sonnet mapping
+      'moonshotai/kimi-k2-0905', // opus mapping  
+      'google/gemini-2.5-flash'  // haiku mapping
+    ];
+    
+    // Check if the model or its family supports BatchTool
+    return batchToolSupportedModels.some(supportedModel => 
+      modelName.includes(supportedModel.split('/')[1]) || modelName === supportedModel
+    );
   }
 
   /**
@@ -557,17 +567,46 @@ export class OpenRouterHandler {
     const choice = data.choices[0];
     const openaiMessage = choice.message;
 
-    // Map finish_reason to anthropic stop_reason
-    const mapStopReason = (finishReason) => {
+    // Map finish_reason to anthropic stop_reason with detailed logging
+    const mapStopReason = (finishReason, originalData) => {
+      let mappedReason;
+      let mappingSource;
+      
       switch (finishReason) {
-        case 'tool_calls': return 'tool_use';
-        case 'stop': return 'end_turn';
-        case 'length': return 'max_tokens';
-        default: return 'end_turn';
+        case 'tool_calls': 
+          mappedReason = 'tool_use';
+          mappingSource = 'standard mapping: tool_calls → tool_use';
+          break;
+        case 'stop': 
+          mappedReason = 'end_turn';
+          mappingSource = 'standard mapping: stop → end_turn (normal completion)';
+          break;
+        case 'length': 
+          mappedReason = 'max_tokens';
+          mappingSource = 'standard mapping: length → max_tokens';
+          break;
+        default: 
+          mappedReason = 'end_turn';
+          mappingSource = `fallback mapping: unknown finish_reason '${finishReason}' → end_turn`;
+          this.logger.warn(`Unknown OpenRouter finish_reason: ${finishReason}, defaulting to end_turn`);
+          break;
       }
+      
+      // Log detailed information when mapping to end_turn
+      if (mappedReason === 'end_turn') {
+        this.logger.info('🔍 STOP_REASON MAPPING TO END_TURN (Non-streaming):');
+        this.logger.info(`   Original finish_reason: "${finishReason}"`);
+        this.logger.info(`   Mapping decision: ${mappingSource}`);
+        if (originalData) {
+          this.logger.info('   Original OpenRouter response:');
+          this.logger.info('   ' + JSON.stringify(originalData, null, 2).replace(/\n/g, '\n   '));
+        }
+      }
+      
+      return mappedReason;
     };
 
-    const stopReason = mapStopReason(choice.finish_reason);
+    const stopReason = mapStopReason(choice.finish_reason, data);
     const toolCalls = openaiMessage.tool_calls || [];
 
     // Create message id
@@ -577,13 +616,12 @@ export class OpenRouterHandler {
 
     const content = [];
     
-    // Only add text content if it exists and is not null/empty
-    if (openaiMessage.content && openaiMessage.content.trim()) {
-      content.push({
-        text: openaiMessage.content,
-        type: 'text'
-      });
-    }
+    // EXACTLY like reference - only use content field, no reasoning handling for non-streaming
+    // Add text content
+    content.push({
+      text: openaiMessage.content,
+      type: 'text'
+    });
     
     // Add tool calls
     toolCalls.forEach(toolCall => {
